@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>黄巾之乱 · 村落起兵 (MVP)</title>
+<style>
+  :root { --bg:#F1EFE8; --panel:#FFFFFF; --line:#D3D1C7; --ink:#2C2C2A; --mut:#5F5E5A; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family: system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
+         background:var(--bg); color:var(--ink); display:flex; gap:16px; padding:16px; }
+  #stage { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:8px; }
+  canvas { display:block; border-radius:8px; cursor:pointer; background:#FBFAF7; }
+  #side { width:320px; display:flex; flex-direction:column; gap:12px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px 14px; }
+  h1 { font-size:16px; margin:0 0 4px; }
+  h2 { font-size:13px; margin:0 0 8px; color:var(--mut); font-weight:500; }
+  .row { display:flex; justify-content:space-between; font-size:13px; padding:3px 0; border-bottom:1px dashed var(--line); }
+  .row:last-child { border-bottom:none; }
+  button { font-size:13px; padding:8px 10px; border-radius:8px; border:1px solid var(--line);
+           background:#fff; cursor:pointer; margin-top:8px; width:100%; }
+  button.primary { background:#A32D2D; color:#fff; border-color:#A32D2D; }
+  button:disabled { opacity:.4; cursor:not-allowed; }
+  #log { height:140px; overflow:auto; font-size:12px; color:var(--mut); line-height:1.5; }
+  .tag { display:inline-block; padding:1px 6px; border-radius:6px; font-size:11px; }
+  .tag.yi { background:#FCEBEB; color:#A32D2D; }
+  .tag.tt { background:#FAEEDA; color:#BA7517; }
+  .tag.neu{ background:#F1EFE8; color:#5F5E5A; }
+  .banner { font-size:15px; font-weight:500; text-align:center; padding:10px; border-radius:8px; }
+  .banner.win { background:#EAF3DE; color:#3B6D11; }
+  .banner.lose{ background:#FCEBEB; color:#A32D2D; }
+</style>
+</head>
+<body>
+  <div id="stage"><canvas id="map" width="680" height="420"></canvas></div>
+  <div id="side">
+    <div class="card">
+      <h1>黄巾之乱 · 村落起兵</h1>
+      <h2>测试剧本 MVP — 从小见大</h2>
+      <div id="res"></div>
+    </div>
+    <div class="card">
+      <h2>选中 / 目标</h2>
+      <div id="info">点击地图上的村落查看信息。</div>
+      <button id="attackBtn" class="primary" disabled>出击 ⚔️</button>
+      <button id="endBtn">下一回合 ⏭️</button>
+      <button id="resetBtn">重置剧本 🔄</button>
+    </div>
+    <div class="card">
+      <h2>战报</h2>
+      <div id="log"></div>
+    </div>
+  </div>
+
+<script>
+/* =========================================================================
+   三层解耦演示：
+   - DATA    : 剧本数据（村落 / 道路 / 势力），与引擎无关
+   - SIM     : 回合引擎、战斗、占领、胜负，纯逻辑、可单测
+   - VIEW    : 地图渲染（本 demo 用 Canvas2D；这就是未来换成 Phaser4 的唯一接缝）
+   - UI      : DOM 面板 / 按钮 / 战报
+   黄巾之乱：玩家扮演义军，从一座村落起兵，吞并邻村、击破黄巾，最终统领州府。
+   ========================================================================= */
+
+/* ----------------------------- DATA LAYER ------------------------------ */
+const FACTIONS = {
+  yi:  { name:'义军',   color:'#A32D2D', halo:'#FCEBEB' },
+  tt:  { name:'黄巾贼', color:'#BA7517', halo:'#FAEEDA' },
+  neu: { name:'中立',   color:'#888780', halo:'#F1EFE8' },
+};
+
+// 地形 → 防御加成 / 产出 / emoji
+const TERRAIN = {
+  plain:    { emoji:'🌾', def:0.0, y:{food:3,prod:1,gold:1}, label:'平原' },
+  forest:   { emoji:'🌲', def:0.3, y:{food:1,prod:2,gold:0}, label:'森林' },
+  hill:     { emoji:'🏔️', def:0.5, y:{food:1,prod:2,gold:1}, label:'丘陵' },
+  mountain: { emoji:'⛰️', def:0.8, y:{food:0,prod:3,gold:1}, label:'山地' },
+  town:     { emoji:'🏯', def:0.4, y:{food:2,prod:2,gold:3}, label:'城池' },
+};
+
+// 村落（节点）。position 为地图坐标；owner 为势力 id。
+const VILLAGE_DEFS = [
+  { id:'zhuo',    name:'涿县', pos:[120,340], terrain:'plain',    owner:'yi',  gar:30 },
+  { id:'zhongsh', name:'中山', pos:[210,250], terrain:'plain',    owner:'neu', gar:15 },
+  { id:'changsh', name:'常山', pos:[330,300], terrain:'forest',   owner:'neu', gar:15 },
+  { id:'hejian',  name:'河间', pos:[150,200], terrain:'plain',    owner:'neu', gar:15 },
+  { id:'ye',      name:'邺城', pos:[300,150], terrain:'town',     owner:'neu', gar:25 },
+  { id:'julu',    name:'巨鹿', pos:[480,110], terrain:'mountain', owner:'tt',  gar:50 },
+  { id:'guangz',  name:'广宗', pos:[520,230], terrain:'hill',     owner:'tt',  gar:35 },
+];
+
+// 道路 / 河流（边）。river 用虚线表示。
+const ROUTE_DEFS = [
+  { a:'zhuo',    b:'zhongsh', type:'road'  },
+  { a:'zhuo',    b:'hejian',  type:'road'  },
+  { a:'zhongsh', b:'changsh', type:'road'  },
+  { a:'hejian',  b:'ye',      type:'river' },
+  { a:'zhongsh', b:'ye',      type:'road'  },
+  { a:'changsh', b:'guangz',  type:'road'  },
+  { a:'ye',      b:'julu',    type:'road'  },
+  { a:'ye',      b:'guangz',  type:'road'  },
+  { a:'hejian',  b:'changsh', type:'road'  },
+];
+
+/* ----------------------------- SIM CORE -------------------------------- */
+let villages = {};      // id -> {name,pos,terrain,owner,gar}
+let routes = [];        // {a,b,type}
+let adjacency = {};     // id -> Set(id)
+let state = { turn:1, food:100, gold:50, over:null };
+let log = [];
+
+function resetGame() {
+  villages = {};
+  VILLAGE_DEFS.forEach(v => villages[v.id] = { ...v });
+  routes = ROUTE_DEFS.map(r => ({ ...r }));
+  adjacency = {};
+  Object.keys(villages).forEach(id => adjacency[id] = new Set());
+  routes.forEach(r => { adjacency[r.a].add(r.b); adjacency[r.b].add(r.a); });
+  state = { turn:1, food:100, gold:50, over:null };
+  log = ['【剧本】公元184年，黄巾起于巨鹿。你于涿县聚义起兵。'];
+  selected = null; target = null;
+}
+
+function isAdjacent(a, b) { return adjacency[a] && adjacency[a].has(b); }
+
+function combat(fromId, toId) {
+  const a = villages[fromId], d = villages[toId];
+  const atk = a.gar;
+  const defEff = Math.round(d.gar * (1 + TERRAIN[d.terrain].def));
+  if (atk > defEff) {
+    const loss = Math.ceil(d.gar * 0.6);
+    const newOwner = a.owner;
+    villages[toId].owner = newOwner;
+    villages[toId].gar = Math.max(1, atk - loss);
+    villages[fromId].gar = 0;
+    log.unshift(`⚔️ ${a.name} 出兵攻取 ${d.name}！(${atk} vs 守军${d.gar})`);
+    return true;
+  } else {
+    const loss = Math.ceil(atk * 0.5);
+    villages[toId].gar = Math.max(1, d.gar - loss);
+    villages[fromId].gar = 0;
+    log.unshift(`🛡️ ${d.name} 守军击退了 ${a.name} 的进攻。`);
+    return false;
+  }
+}
+
+function checkVictory() {
+  const ids = Object.keys(villages);
+  const mine = ids.filter(id => villages[id].owner === 'yi');
+  const ttLeft = ids.some(id => villages[id].owner === 'tt');
+  if (mine.length === 0) { state.over = 'lose'; log.unshift('💀 义军覆灭，剧本失败。'); }
+  else if (!ttLeft && ids.every(id => villages[id].owner === 'yi')) {
+    state.over = 'win'; log.unshift('🏆 扫平黄巾，你已统领全境！');
+  }
+}
+
+function aiTurn() {
+  // 黄巾贼：每个据点尝试进攻一个相邻且可胜的村落
+  Object.keys(villages).forEach(id => {
+    const v = villages[id];
+    if (v.owner !== 'tt' || v.gar <= 5) return;
+    for (const nb of adjacency[id]) {
+      const t = villages[nb];
+      if (t.owner === 'tt') continue;
+      const defEff = Math.round(t.gar * (1 + TERRAIN[t.terrain].def));
+      if (v.gar > defEff * 1.1) { combat(id, nb); break; }
+    }
+  });
+}
+
+function endTurn() {
+  if (state.over) return;
+  aiTurn();
+  // 玩家产出结算
+  Object.values(villages).forEach(v => {
+    if (v.owner === 'yi') {
+      const y = TERRAIN[v.terrain].y;
+      state.food += y.food; state.gold += y.gold;
+    }
+  });
+  state.turn++;
+  log.unshift(`— 第 ${state.turn - 1} 回合结束，粮${state.food} 钱${state.gold} —`);
+  checkVictory();
+  selected = null; target = null;
+}
+
+/* ----------------------------- VIEW LAYER ------------------------------ */
+const canvas = document.getElementById('map');
+const ctx = canvas.getContext('2d');
+let selected = null, target = null;
+
+function factionTag(owner) {
+  const f = FACTIONS[owner];
+  return `<span class="tag ${owner}">${f.name}</span>`;
+}
+
+function render() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  // 控制区光晕
+  Object.values(villages).forEach(v => {
+    ctx.beginPath();
+    ctx.arc(v.pos[0], v.pos[1], 46, 0, Math.PI * 2);
+    ctx.fillStyle = FACTIONS[v.owner].halo;
+    ctx.fill();
+  });
+  // 道路 / 河流
+  routes.forEach(r => {
+    const a = villages[r.a], b = villages[r.b];
+    ctx.beginPath();
+    ctx.moveTo(a.pos[0], a.pos[1]); ctx.lineTo(b.pos[0], b.pos[1]);
+    ctx.strokeStyle = '#9a988f'; ctx.lineWidth = 1.5;
+    if (r.type === 'river') ctx.setLineDash([5, 4]); else ctx.setLineDash([]);
+    ctx.stroke(); ctx.setLineDash([]);
+  });
+  // 节点
+  Object.values(villages).forEach(v => {
+    ctx.beginPath();
+    ctx.arc(v.pos[0], v.pos[1], 15, 0, Math.PI * 2);
+    ctx.fillStyle = '#FFFFFF'; ctx.fill();
+    ctx.lineWidth = 2.5; ctx.strokeStyle = FACTIONS[v.owner].color; ctx.stroke();
+    ctx.font = '17px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(TERRAIN[v.terrain].emoji, v.pos[0], v.pos[1]);
+    ctx.font = '11px sans-serif'; ctx.fillStyle = '#2C2C2A';
+    ctx.fillText(v.gar, v.pos[0], v.pos[1] + 24);
+    ctx.fillStyle = '#5F5E5A';
+    ctx.fillText(v.name, v.pos[0], v.pos[1] - 26);
+  });
+  // 选中 / 目标高亮
+  const ring = (id, color) => {
+    const v = villages[id];
+    ctx.beginPath(); ctx.arc(v.pos[0], v.pos[1], 21, 0, Math.PI * 2);
+    ctx.lineWidth = 2; ctx.strokeStyle = color; ctx.setLineDash([4, 3]); ctx.stroke(); ctx.setLineDash([]);
+  };
+  if (selected) ring(selected, '#2C2C2A');
+  if (target) ring(target, '#A32D2D');
+}
+
+/* ----------------------------- UI LAYER -------------------------------- */
+const infoEl = document.getElementById('info');
+const resEl = document.getElementById('res');
+const logEl = document.getElementById('log');
+const attackBtn = document.getElementById('attackBtn');
+const endBtn = document.getElementById('endBtn');
+const resetBtn = document.getElementById('resetBtn');
+
+function updateUI() {
+  let html = '';
+  html += `<div class="row"><span>回合</span><b>${state.turn}</b></div>`;
+  html += `<div class="row"><span>粮草</span><b>${state.food}</b></div>`;
+  html += `<div class="row"><span>钱粮</span><b>${state.gold}</b></div>`;
+  const owned = Object.values(villages).filter(v => v.owner === 'yi').length;
+  html += `<div class="row"><span>掌控村落</span><b>${owned}/${Object.keys(villages).length}</b></div>`;
+  resEl.innerHTML = html;
+
+  if (state.over === 'win') infoEl.innerHTML = `<div class="banner win">🏆 通关：你已扫平黄巾，割据一方！</div>`;
+  else if (state.over === 'lose') infoEl.innerHTML = `<div class="banner lose">💀 义军覆灭</div>`;
+  else if (selected && target) {
+    const s = villages[selected], t = villages[target];
+    infoEl.innerHTML =
+      `<div class="row"><span>出击</span><b>${s.name} → ${t.name}</b></div>` +
+      `<div class="row"><span>我军</span><b>${s.gar}</b></div>` +
+      `<div class="row"><span>守军</span><b>${t.gar} (${TERRAIN[t.terrain].label}+${Math.round(TERRAIN[t.terrain].def*100)}%防)</b></div>` +
+      `<div style="margin-top:6px">${factionTag(t.owner)} 目标归属</div>`;
+    attackBtn.disabled = false;
+  } else if (selected) {
+    const v = villages[selected];
+    infoEl.innerHTML =
+      `<div class="row"><span>村落</span><b>${v.name}</b></div>` +
+      `<div class="row"><span>地形</span><b>${TERRAIN[v.terrain].emoji} ${TERRAIN[v.terrain].label}</b></div>` +
+      `<div class="row"><span>守军</span><b>${v.gar}</b></div>` +
+      `<div class="row"><span>归属</span><b>${factionTag(v.owner)}</b></div>` +
+      `<div style="margin-top:6px;color:#5F5E5A">${v.owner==='yi'?'点相邻敌/中立村落设为出击目标':'点你的村落再选目标'}</div>`;
+    attackBtn.disabled = true;
+  } else {
+    infoEl.innerHTML = '点击地图上的村落查看信息。';
+    attackBtn.disabled = true;
+  }
+
+  logEl.innerHTML = log.slice(0, 30).map(l => `<div>${l}</div>`).join('');
+}
+
+function handleClick(e) {
+  if (state.over) return;
+  const rect = canvas.getBoundingClientRect();
+  const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+  const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+  let hit = null;
+  for (const v of Object.values(villages)) {
+    if (Math.hypot(v.pos[0] - x, v.pos[1] - y) < 20) { hit = v.id; break; }
+  }
+  if (!hit) return;
+  if (selected === null) { selected = hit; }
+  else if (selected === hit) { selected = null; target = null; }
+  else if (selected && villages[selected].owner === 'yi' && villages[hit].owner !== 'yi' && isAdjacent(selected, hit)) {
+    target = hit;
+  } else { selected = hit; target = null; }
+  render(); updateUI();
+}
+
+canvas.addEventListener('click', handleClick);
+attackBtn.addEventListener('click', () => {
+  if (selected && target) { combat(selected, target); checkVictory(); selected = null; target = null; render(); updateUI(); }
+});
+endBtn.addEventListener('click', () => { endTurn(); render(); updateUI(); });
+resetBtn.addEventListener('click', () => { resetGame(); render(); updateUI(); });
+
+/* ----------------------------- BOOT ------------------------------------ */
+resetGame();
+render();
+updateUI();
+</script>
+</body>
+</html>

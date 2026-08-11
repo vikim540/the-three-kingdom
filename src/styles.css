@@ -1,0 +1,322 @@
+@import "tailwindcss";
+
+/* 全局基础：禁用画布上的文本选中与默认的触摸行为，便于拖拽平移 */
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overscroll-behavior: none;
+  font-family: ui-sans-serif, system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+#map {
+  touch-action: none;
+  cursor: grab;
+}
+#map:active {
+  cursor: grabbing;
+}
+
+/* ===== 入场动画（Tailwind 过渡补充）===== */
+@keyframes popIn {
+  from {
+    opacity: 0;
+    transform: scale(0.92) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.pop-in {
+  animation: popIn 0.18s ease-out both;
+}
+.fade-in {
+  animation: fadeIn 0.15s ease-out both;
+}
+/* 轮盘按钮逐个浮现（carousel 效果） */
+.radial-pop {
+  animation: popIn 0.2s ease-out both;
+}
+
+/* ===== 通用入场动画工具类（编辑模式聚焦、左面板晋升淡入、看板切换复用）===== */
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-18px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes liftIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes shimmerText {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+.anim-fade {
+  animation: fadeIn 0.25s ease-out both;
+}
+.anim-slide {
+  animation: slideInLeft 0.3s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+.anim-lift {
+  animation: liftIn 0.22s ease-out both;
+}
+.anim-pop {
+  animation: popIn 0.18s ease-out both;
+}
+/* 高稀有度文字流光（紫/红/金卡面名称） */
+.anim-shimmer {
+  background: linear-gradient(90deg, #fff, var(--rc, #fde68a), #fff);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmerText 2.4s linear infinite;
+}
+
+/* 面板 / 弹窗按钮统一过渡与点击缩放（免去逐按钮硬编码） */
+#panel button,
+.modal-overlay button,
+#intro button {
+  transition:
+    transform 0.12s ease,
+    background-color 0.12s ease,
+    filter 0.12s ease;
+}
+#panel button:active,
+.modal-overlay button:active,
+#intro button:active,
+#dashboard button:active {
+  transform: scale(0.96);
+}
+/* 固定看板按钮统一过渡（tab 选中放大 / 空地 hover 放大已在 Tailwind 类内） */
+#dashboard button {
+  transition:
+    transform 0.12s ease,
+    background-color 0.12s ease,
+    filter 0.12s ease;
+}
+
+/* ===== 奇遇卡牌（高级质感：背面→翻牌、大字种类、稀有度辉光）===== */
+.gacha-card {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  perspective: 900px;
+  cursor: default;
+}
+.gc-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.55s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+.gacha-card.revealed .gc-inner {
+  transform: rotateY(180deg);
+}
+.gc-back,
+.gc-front {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.gc-back {
+  transform: rotateY(0deg);
+  background:
+    radial-gradient(circle at 50% 35%, rgba(217, 70, 239, 0.35), transparent 60%),
+    repeating-linear-gradient(45deg, #2a1140 0 10px, #1c0d2e 10px 20px);
+  border: 1px solid rgba(217, 70, 239, 0.5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.gc-back-emblem {
+  font-size: 2rem;
+  animation: gachaPulse 1.6s ease-in-out infinite;
+}
+.gc-back-text {
+  color: #e9d5ff;
+  letter-spacing: 4px;
+  font-size: 0.8rem;
+}
+@keyframes gachaPulse {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scale(0.95);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+}
+/* 高稀有度（紫/红/金）卡面流光层：斜向高光循环扫过 */
+.gc-shine {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  overflow: hidden;
+  z-index: 2;
+}
+.gc-shine::before {
+  content: '';
+  position: absolute;
+  top: -60%;
+  left: -70%;
+  width: 45%;
+  height: 220%;
+  transform: rotate(10deg);
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.15) 35%,
+    rgba(255, 255, 255, 0.65) 50%,
+    rgba(255, 255, 255, 0.15) 65%,
+    transparent 100%
+  );
+  animation: gcShineSweep 2.8s ease-in-out infinite;
+}
+@keyframes gcShineSweep {
+  0% {
+    left: -70%;
+  }
+  55%,
+  100% {
+    left: 130%;
+  }
+}
+/* 流光层的容器若为 flex 居中，确保不挤占内容 */
+.gc-back .gc-shine,
+.gc-front .gc-shine {
+  z-index: 3;
+}
+
+/* ===== 编辑模式（ESC 开启）下：可点击修改的元素高亮 ===== */
+body.dev-edit-on [data-edit],
+body.dev-edit-on [data-edit-img] {
+  outline: 1px dashed rgba(217, 70, 239, 0.85);
+  outline-offset: 2px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background-color 0.12s ease, outline-color 0.12s ease;
+}
+body.dev-edit-on [data-edit]:hover,
+body.dev-edit-on [data-edit-img]:hover {
+  background: rgba(217, 70, 239, 0.14);
+  outline-color: rgba(245, 158, 11, 0.95);
+}
+.gc-front {
+  transform: rotateY(180deg);
+  border: 2px solid var(--rc);
+  box-shadow: 0 0 16px var(--glow), inset 0 0 26px rgba(0, 0, 0, 0.45);
+  background-size: cover;
+  background-position: center;
+  background-blend-mode: multiply;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 6px;
+  text-align: center;
+}
+.gc-cat {
+  font-size: 1.7rem;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 2px;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.75);
+  margin-top: 2px;
+}
+.gc-rarity {
+  font-size: 0.62rem;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--rc);
+  color: #0b0b0b;
+  font-weight: 700;
+  margin-top: 4px;
+}
+.gc-emoji {
+  font-size: 2.1rem;
+  margin: 6px 0 2px;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
+}
+.gc-name {
+  font-size: 0.95rem;
+  font-weight: 800;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+}
+.gc-desc {
+  font-size: 0.6rem;
+  line-height: 1.25;
+  color: rgba(255, 255, 255, 0.9);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+  margin-top: 3px;
+  padding: 0 2px;
+}
+.gc-effects {
+  margin-top: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  justify-content: center;
+}
+.chip {
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+.chip.up {
+  color: #bbf7d0;
+}
+.chip.down {
+  color: #fecaca;
+}
+.chip.res {
+  color: #fde68a;
+}
+/* 月度事件候选卡：背面显大类（可点），点击揭晓 */
+.gacha-card.mystery {
+  cursor: pointer;
+}
+.gacha-card.mystery:hover {
+  transform: translateY(-4px);
+}
+.gacha-card.mystery .gc-back-emblem {
+  font-size: 1.8rem;
+}

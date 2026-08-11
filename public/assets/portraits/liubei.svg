@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 400" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1e3a5f"/><stop offset="1" stop-color="#0f172a"/>
+    </linearGradient>
+  </defs>
+  <rect width="300" height="400" fill="url(#g)"/>
+  <text x="150" y="215" font-size="120" text-anchor="middle" fill="#e2e8f0">🐉</text>
+  <text x="150" y="305" font-size="22" text-anchor="middle" fill="#94a3b8">主角立绘</text>
+</svg>
