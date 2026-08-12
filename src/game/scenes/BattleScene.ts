@@ -4,16 +4,16 @@ import { useDevStore } from "@/stores/useDevStore";
 import { BattleUnit } from "@/types/game";
 import { getPerspectiveScale, REGION_COLORS } from "@/types/region";
 
-interface UnitCardContainer extends Phaser.GameObjects.Container {
+interface UnitSpriteContainer extends Phaser.GameObjects.Container {
   unitInstanceId?: string;
   normX?: number;
   normY?: number;
 }
 
 export class BattleScene extends Phaser.Scene {
-  private unitContainers: Map<string, UnitCardContainer> = new Map();
+  private unitContainers: Map<string, UnitSpriteContainer> = new Map();
   private regionGraphics!: Phaser.GameObjects.Graphics;
-  private activeRadialUnitId: string | null = null;
+  private fogTileSprite!: Phaser.GameObjects.TileSprite;
 
   constructor() {
     super({ key: "BattleScene" });
@@ -23,11 +23,14 @@ export class BattleScene extends Phaser.Scene {
     // 1. 全螢幕山谷背景圖
     this.addBackground();
 
-    // 2. 多邊形區域繪製圖層 (僅在開發者模式下顯示)
+    // 2. 飄動環境雲霧層 (動態雨霧飄動感覺)
+    this.addDriftingFogLayer();
+
+    // 3. 多邊形區域繪製圖層 (僅在開發者模式下顯示)
     this.regionGraphics = this.add.graphics();
     this.drawPolygonsOverlay();
 
-    // 3. 訂閱 Zustand Store
+    // 4. 訂閱 Zustand Store
     this.syncUnitsFromStore();
 
     useBattleStore.subscribe((state) => {
@@ -38,10 +41,18 @@ export class BattleScene extends Phaser.Scene {
       this.drawPolygonsOverlay();
     });
 
-    // 4. 螢幕 resize 時重新整頓
+    // 5. 螢幕 resize 時重新整頓
     this.scale.on("resize", () => {
       this.scene.restart();
     });
+  }
+
+  update(_time: number, delta: number) {
+    // 動態山林雨霧飄動動畫 (橫向與微縱向飄動)
+    if (this.fogTileSprite) {
+      this.fogTileSprite.tilePositionX += (delta * 0.02);
+      this.fogTileSprite.tilePositionY += (delta * 0.005);
+    }
   }
 
   private addBackground() {
@@ -51,6 +62,30 @@ export class BattleScene extends Phaser.Scene {
     const bg = this.add.image(w / 2, h / 2, texKey);
     bg.setDisplaySize(w, h);
     bg.setAlpha(0.95);
+  }
+
+  /**
+   * 添加動態山林雲霧層
+   */
+  private addDriftingFogLayer() {
+    const w = this.scale.width;
+    const h = this.scale.height;
+
+    if (this.textures.exists("fog_layer")) {
+      this.fogTileSprite = this.add.tileSprite(w / 2, h / 2, w, h, "fog_layer");
+      this.fogTileSprite.setAlpha(0.35);
+      this.fogTileSprite.setBlendMode(Phaser.BlendModes.SCREEN);
+
+      // 雲霧透明度呼吸動態
+      this.tweens.add({
+        targets: this.fogTileSprite,
+        alpha: 0.52,
+        duration: 4000,
+        yoyo: true,
+        repeat: -1,
+        ease: "Sine.easeInOut",
+      });
+    }
   }
 
   /**
@@ -70,8 +105,8 @@ export class BattleScene extends Phaser.Scene {
       if (region.points.length < 3) return;
       const colorHex = parseInt(REGION_COLORS[region.type].stroke.replace("#", "0x"), 16);
 
-      this.regionGraphics.lineStyle(2, colorHex, 0.9);
-      this.regionGraphics.fillStyle(colorHex, 0.25);
+      this.regionGraphics.lineStyle(2.5, colorHex, 0.95);
+      this.regionGraphics.fillStyle(colorHex, 0.28);
 
       this.regionGraphics.beginPath();
       region.points.forEach((p, idx) => {
@@ -91,7 +126,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   /**
-   * 建立與更新「實體卡牌」名將單位 Container
+   * 建立與更新「2D 描邊透明角色」單位 Container (徹底移除矩形卡牌)
    */
   private updateUnitsVisual(units: BattleUnit[]) {
     const sw = this.scale.width;
@@ -100,7 +135,7 @@ export class BattleScene extends Phaser.Scene {
     units.forEach((unit) => {
       let container = this.unitContainers.get(unit.instanceId);
 
-      // 歸一化座標 (0 ~ 1) 轉成畫面像素 座標 (px, py)
+      // 歸一化座標 (0 ~ 1) 轉成畫面像素座標 (px, py)
       const px = unit.x <= 1.0 ? unit.x * sw : unit.x;
       const py = unit.y <= 1.0 ? unit.y * sh : unit.y;
 
@@ -108,11 +143,11 @@ export class BattleScene extends Phaser.Scene {
       const perspectiveScale = getPerspectiveScale(normY);
 
       if (!container) {
-        container = this.add.container(px, py) as UnitCardContainer;
+        container = this.add.container(px, py) as UnitSpriteContainer;
         container.unitInstanceId = unit.instanceId;
 
-        // 構建精美卡牌 UI
-        this.buildHeroCard(container, unit);
+        // 構建 2D 描邊角色 UI
+        this.build2DCharacterSprite(container, unit);
         this.unitContainers.set(unit.instanceId, container);
       }
 
@@ -131,10 +166,10 @@ export class BattleScene extends Phaser.Scene {
         ease: "Power2",
       });
 
-      // 更新卡片血條
-      const hpFill = container.getByName("cardHpFill") as Phaser.GameObjects.Rectangle;
+      // 更新血條
+      const hpFill = container.getByName("unitHpFill") as Phaser.GameObjects.Rectangle;
       if (hpFill) {
-        const fullW = (container.getData("cardWidth") as number) * 0.82;
+        const fullW = 64;
         const ratio = Math.max(0, unit.currentHp / unit.maxHp);
         hpFill.setSize(fullW * ratio, 5);
       }
@@ -154,40 +189,32 @@ export class BattleScene extends Phaser.Scene {
   }
 
   /**
-   * 創建三國修仙名將「卡牌」UI Container
+   * 創建 2D 描邊光圈透明底角色 (無卡牌框)
    */
-  private buildHeroCard(container: UnitCardContainer, unit: BattleUnit) {
+  private build2DCharacterSprite(container: UnitSpriteContainer, unit: BattleUnit) {
     container.removeAll(true);
 
     const isPlayer = unit.faction === "PLAYER";
     const quality = unit.heroConfig.quality || "靈";
+    const radius = 34;
 
-    const cardW = isPlayer ? 96 : 82;
-    const cardH = isPlayer ? 128 : 110;
-    container.setData("cardWidth", cardW);
-    container.setData("cardHeight", cardH);
-
-    const qualityColors: Record<string, number> = {
+    const qualityGlowColors: Record<string, number> = {
       仙: 0xf59e0b,
       帝: 0xa855f7,
       王: 0x3b82f6,
       靈: 0x10b981,
       凡: 0x64748b,
     };
-    const borderColor = isPlayer ? (qualityColors[quality] || 0x10b981) : 0xb91c1c;
+    const borderColor = isPlayer ? (qualityGlowColors[quality] || 0x10b981) : 0xef4444;
 
-    // 1. 卡牌底框與發光
-    const cardGlow = this.add.graphics();
-    cardGlow.fillStyle(borderColor, 0.25);
-    cardGlow.fillRoundedRect(-cardW / 2 - 3, -cardH / 2 - 3, cardW + 6, cardH + 6, 8);
+    // 1. 2D 腳下發光橢圓底盤
+    const baseDisk = this.add.graphics();
+    baseDisk.fillStyle(borderColor, 0.28);
+    baseDisk.fillEllipse(0, radius - 4, radius * 1.5, radius * 0.65);
+    baseDisk.lineStyle(2, borderColor, 0.95);
+    baseDisk.strokeEllipse(0, radius - 4, radius * 1.5, radius * 0.65);
 
-    const cardBg = this.add.graphics();
-    cardBg.fillStyle(0x09090b, 0.95);
-    cardBg.fillRoundedRect(-cardW / 2, -cardH / 2, cardW, cardH, 6);
-    cardBg.lineStyle(isPlayer ? 2.5 : 2, borderColor, 1);
-    cardBg.strokeRoundedRect(-cardW / 2, -cardH / 2, cardW, cardH, 6);
-
-    // 2. 立繪圖片
+    // 2. 2D 描邊角色頭像/立繪 Sprite
     let texKey = "hero_protagonist";
     const id = unit.heroConfig.id;
     if (id === "hero_huang_zhong") texKey = "hero_huang_zhong";
@@ -197,67 +224,82 @@ export class BattleScene extends Phaser.Scene {
     else if (id === "enemy_bandit_chief") texKey = "enemy_bandit_chief";
     else if (id === "enemy_bandit_thug") texKey = "enemy_bandit_thug";
 
-    const portrait = this.add.image(0, -6, texKey);
-    portrait.setDisplaySize(cardW - 8, cardH - 36);
+    // 2D 圓形描邊金/紅圈頭像 Sprite
+    const charCircleBg = this.add.circle(0, -6, radius, 0x09090b, 0.95);
+    charCircleBg.setStrokeStyle(2.5, borderColor, 1);
 
-    // 3. 頂部陣營條
-    const factionBar = this.add.graphics();
-    const factionColor = unit.heroConfig.faction === "蜀" ? 0x15803d :
-      unit.heroConfig.faction === "魏" ? 0x1d4ed8 : 0x78350f;
-    factionBar.fillStyle(factionColor, 0.9);
-    factionBar.fillRoundedRect(-cardW / 2 + 2, -cardH / 2 + 2, cardW - 4, 16, { tl: 5, tr: 5, bl: 0, br: 0 });
+    const charSprite = this.add.image(0, -6, texKey);
+    charSprite.setDisplaySize(radius * 1.85, radius * 1.85);
 
-    const factionText = this.add.text(0, -cardH / 2 + 10, `${unit.heroConfig.faction} • ${quality}階`, {
-      fontSize: "10px",
-      color: "#ffffff",
-      fontStyle: "bold",
-    }).setOrigin(0.5);
+    // 圓形裁切遮罩
+    const maskG = this.add.graphics();
+    maskG.fillStyle(0xffffff);
+    maskG.fillCircle(container.x, container.y - 6, radius - 2);
+    charSprite.setMask(new Phaser.Display.Masks.GeometryMask(this, maskG));
 
-    // 4. 底部名字牌
-    const nameBg = this.add.graphics();
-    nameBg.fillStyle(0x0f172a, 0.95);
-    nameBg.fillRoundedRect(-cardW / 2 + 2, cardH / 2 - 24, cardW - 4, 22, { tl: 0, tr: 0, bl: 5, br: 5 });
-    nameBg.lineStyle(1, borderColor, 0.7);
-    nameBg.strokeRoundedRect(-cardW / 2 + 2, cardH / 2 - 24, cardW - 4, 22, { tl: 0, tr: 0, bl: 5, br: 5 });
-
-    const nameText = this.add.text(0, cardH / 2 - 13, unit.heroConfig.name, {
-      fontSize: "12px",
-      color: isPlayer ? "#fef08a" : "#fca5a5",
-      fontStyle: "bold",
-      stroke: "#000000",
-      strokeThickness: 3,
-    }).setOrigin(0.5);
-
-    // 5. 血條
-    const hpBarW = cardW * 0.82;
-    const hpBg = this.add.rectangle(0, -cardH / 2 - 7, hpBarW, 6, 0x000000, 0.85);
+    // 3. 頂部血條
+    const hpBarW = 64;
+    const hpBg = this.add.rectangle(0, -radius - 14, hpBarW, 6, 0x000000, 0.85);
     const hpFill = this.add.rectangle(
-      -hpBarW / 2, -cardH / 2 - 7,
+      -hpBarW / 2, -radius - 14,
       hpBarW * (unit.currentHp / unit.maxHp), 5,
       isPlayer ? 0x22c55e : 0xef4444, 1
     ).setOrigin(0, 0.5);
-    hpFill.setName("cardHpFill");
+    hpFill.setName("unitHpFill");
 
-    container.add([cardGlow, cardBg, portrait, factionBar, factionText, nameBg, nameText, hpBg, hpFill]);
+    // 4. 腳下名字與職位標籤
+    const nameText = this.add.text(0, radius + 12, unit.heroConfig.name, {
+      fontSize: "11px",
+      color: isPlayer ? "#fef08a" : "#fca5a5",
+      fontStyle: "bold",
+      stroke: "#000000",
+      strokeThickness: 3.5,
+    }).setOrigin(0.5);
+
+    // 伏擊標籤
+    const isAmbush = unit.statusEffects.includes("AMBUSH");
+    let ambushTag: Phaser.GameObjects.Text | null = null;
+    if (isAmbush) {
+      ambushTag = this.add.text(0, -radius - 26, "🌿 伏擊中", {
+        fontSize: "10px",
+        color: "#6ee7b7",
+        stroke: "#064e3b",
+        strokeThickness: 3,
+      }).setOrigin(0.5);
+    }
+
+    // 組合 Container
+    const children = [baseDisk, charCircleBg, charSprite, hpBg, hpFill, nameText];
+    if (ambushTag) children.push(ambushTag);
+    container.add(children);
+
+    // 呼吸浮動 Tween 動畫 (自然微上下飄動)
+    this.tweens.add({
+      targets: charSprite,
+      y: -9,
+      duration: 1500,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.easeInOut",
+    });
 
     container.setInteractive(
-      new Phaser.Geom.Rectangle(-cardW / 2, -cardH / 2, cardW, cardH),
-      Phaser.Geom.Rectangle.Contains
+      new Phaser.Geom.Circle(0, -6, radius),
+      Phaser.Geom.Circle.Contains
     );
 
-    // 點擊觸發選擇與指令輪盤
     container.on("pointerdown", () => {
       if (unit.faction === "PLAYER") {
         useBattleStore.getState().setSelectedUnitId(unit.instanceId);
       }
     });
 
-    // 懸停動畫
+    // 懸停放大
     container.on("pointerover", () => {
       this.tweens.add({
         targets: container,
-        scaleX: container.scaleX * 1.1,
-        scaleY: container.scaleY * 1.1,
+        scaleX: container.scaleX * 1.12,
+        scaleY: container.scaleY * 1.12,
         duration: 120,
         ease: "Power1",
       });

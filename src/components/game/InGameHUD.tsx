@@ -4,15 +4,13 @@ import React, { useState, useEffect, useRef } from "react";
 import { useBattleStore } from "@/stores/useBattleStore";
 import { useGameStore } from "@/stores/useGameStore";
 import { useInventoryStore } from "@/stores/useInventoryStore";
-import { TacticalActionType } from "@/types/game";
 import { DevModeEditor } from "./DevModeEditor";
-import { Menu, RotateCcw, X, ScrollText, Backpack, Users } from "lucide-react";
+import { Menu, RotateCcw, X, ScrollText, Backpack, Users, Play, Crosshair } from "lucide-react";
 
 interface InGameHUDProps {
   onStartBattle: () => void;
   onBaitAction: () => void;
   onResetDeployment: () => void;
-  onExecuteAction: (action: TacticalActionType) => void;
   onReturnHome: () => void;
   onExportSave: () => void;
 }
@@ -78,8 +76,8 @@ export const InGameHUD: React.FC<InGameHUDProps> = ({
         >
           <span className="text-amber-400">❖</span>
           <span>
-            {phase === "DEPLOYMENT" && "布陣中"}
-            {phase === "BATTLE_IN_PROGRESS" && "戰鬥中"}
+            {phase === "DEPLOYMENT" && "布陣階段 (拖拽下方手牌卡牌至亮色區域)"}
+            {phase === "BATTLE_IN_PROGRESS" && "兩軍交鋒中"}
             {phase === "VICTORY" && "大獲全勝"}
             {phase === "DEFEAT" && "戰敗失陷"}
           </span>
@@ -171,11 +169,11 @@ export const InGameHUD: React.FC<InGameHUDProps> = ({
               <div className="text-xs leading-relaxed text-stone-200">
                 {isHuangZhong ? (
                   <>
-                    拖拽<strong className="text-amber-300">黃忠</strong>至側翼<span className="text-emerald-400">草叢埋伏區</span>，觸發神箭狙殺敵首！
+                    拖拽<strong className="text-amber-300">黃忠</strong>至側翼<span className="text-emerald-400">草叢伏擊區</span>，觸發神箭狙殺敵首！
                   </>
                 ) : (
                   <>
-                    拖拽名將卡牌至藍色/綠色多邊形區域，按<strong className="text-emerald-400">【開始戰鬥】</strong>！
+                    拖拽下方名將卡牌至藍/綠多邊形區域，再點擊右下角<strong className="text-emerald-400">【開始戰鬥】</strong>！
                   </>
                 )}
               </div>
@@ -190,36 +188,30 @@ export const InGameHUD: React.FC<InGameHUDProps> = ({
         </div>
       )}
 
-      {/* ─── 底部中央：僅在布陣階段顯示大按鈕 ─── */}
-      {phase === "DEPLOYMENT" && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-5 pointer-events-auto">
-          {isHuangZhong && (
-            <button
-              onClick={onBaitAction}
-              className="px-7 py-3 rounded-2xl border-2 border-amber-500/80 font-black font-serif-title text-sm text-amber-100 shadow-[0_0_20px_rgba(245,158,11,0.4)] transition-all duration-200 hover:scale-105 active:scale-95"
-              style={{
-                background: "linear-gradient(135deg, rgba(120,40,10,0.92), rgba(180,70,15,0.85))",
-              }}
-            >
-              🏹 假逃誘敵 (伏擊)
-            </button>
-          )}
-
-          <button
-            onClick={onStartBattle}
-            className="px-9 py-3.5 rounded-2xl border-2 border-emerald-400/90 font-black font-serif-title text-base text-emerald-100 shadow-[0_0_25px_rgba(16,185,129,0.5)] transition-all duration-200 hover:scale-105 active:scale-95"
-            style={{
-              background: "linear-gradient(135deg, rgba(6,78,59,0.95), rgba(4,120,87,0.88))",
-            }}
-          >
-            ⚔️ 開始戰鬥！
-          </button>
-        </div>
-      )}
-
-      {/* ─── 右下角：資源與快捷物品欄入口 (B / TAB) ─── */}
+      {/* ─── 右下角：資源、背包與「開始戰鬥」大按鈕 (徹底防止與底部中央手牌重合) ─── */}
       <div className="fixed bottom-5 right-5 z-30 flex items-center gap-3 pointer-events-auto">
-        <div className="px-3 py-1.5 rounded-xl border border-stone-700 bg-stone-950/85 text-xs font-bold flex items-center gap-3 backdrop-blur-md">
+        {phase === "DEPLOYMENT" && (
+          <div className="flex items-center gap-2 mr-2">
+            {isHuangZhong && (
+              <button
+                onClick={onBaitAction}
+                className="px-4 py-2.5 rounded-xl border-2 border-amber-500/80 font-bold text-xs text-amber-200 shadow-lg flex items-center gap-1.5 transition hover:scale-105"
+                style={{ background: "linear-gradient(135deg, rgba(120,40,10,0.95), rgba(180,70,15,0.9))" }}
+              >
+                <Crosshair className="w-4 h-4" /> 假逃誘敵
+              </button>
+            )}
+            <button
+              onClick={onStartBattle}
+              className="px-6 py-2.5 rounded-xl border-2 border-emerald-400 font-black font-serif-title text-sm text-emerald-100 shadow-[0_0_20px_rgba(16,185,129,0.5)] flex items-center gap-2 transition hover:scale-105 animate-pulse"
+              style={{ background: "linear-gradient(135deg, rgba(6,78,59,0.95), rgba(4,120,87,0.9))" }}
+            >
+              <Play className="w-4 h-4 fill-emerald-100" /> 開始戰鬥！
+            </button>
+          </div>
+        )}
+
+        <div className="px-3 py-2 rounded-xl border border-stone-700 bg-stone-950/85 text-xs font-bold flex items-center gap-3 backdrop-blur-md">
           <span className="text-amber-300">💰 {spiritStones}</span>
           <span className="text-purple-300">✨ {heroSouls}</span>
         </div>

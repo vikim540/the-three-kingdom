@@ -4,6 +4,7 @@ export type RegionType =
   | "AMBUSH"        // 埋伏區 (半透明綠)
   | "PLAYER_SPAWN"  // 玩家出生 (半透明藍)
   | "ENEMY_SPAWN"   // 敵方出生 (半透明橙)
+  | "SAFE_ZONE"     // 安全區/逃生 (半透明青藍)
   | "DISABLED";     // 禁用 (半透明灰)
 
 export interface Point2D {
@@ -16,15 +17,16 @@ export interface PolygonRegion {
   name: string;
   type: RegionType;
   points: Point2D[];
-  scaleWeight?: number; // Y 軸近大遠小縮放權重 (0.4 ~ 1.2)
+  scaleWeight?: number; // Y 軸近大遠小縮放權重
 }
 
 export const REGION_COLORS: Record<RegionType, { stroke: string; fill: string; label: string }> = {
   AIR_WALL: { stroke: "#ef4444", fill: "rgba(239, 68, 68, 0.35)", label: "空氣牆" },
   ROAD: { stroke: "#eab308", fill: "rgba(234, 179, 8, 0.3)", label: "道路" },
   AMBUSH: { stroke: "#22c55e", fill: "rgba(34, 197, 94, 0.35)", label: "埋伏區" },
-  PLAYER_SPAWN: { stroke: "#3b82f6", fill: "rgba(59, 130, 246, 0.35)", label: "玩家出生" },
-  ENEMY_SPAWN: { stroke: "#f97316", fill: "rgba(249, 115, 22, 0.35)", label: "敵方出生" },
+  PLAYER_SPAWN: { stroke: "#3b82f6", fill: "rgba(59, 130, 246, 0.35)", label: "玩家出生點" },
+  ENEMY_SPAWN: { stroke: "#f97316", fill: "rgba(249, 115, 22, 0.35)", label: "敵方出生點" },
+  SAFE_ZONE: { stroke: "#38bdf8", fill: "rgba(56, 189, 248, 0.35)", label: "安全區域" },
   DISABLED: { stroke: "#64748b", fill: "rgba(100, 116, 139, 0.35)", label: "禁用" },
 };
 
@@ -43,9 +45,6 @@ export function isPointInPolygon(point: Point2D, vs: Point2D[]): boolean {
   return inside;
 }
 
-/**
- * 根據 Y 座標比例計算近大遠小透視縮放比例
- */
 export function getPerspectiveScale(yRatio: number, minScale = 0.45, maxScale = 1.15): number {
   return minScale + Math.max(0, Math.min(1, yRatio)) * (maxScale - minScale);
 }

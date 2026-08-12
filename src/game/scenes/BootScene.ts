@@ -8,8 +8,9 @@ export class BootScene extends Phaser.Scene {
   preload() {
     this.load.image("forest_path_bg", "/assets/terrain/forest_path_bg.webp");
     this.load.image("battle_bg", "/assets/terrain/battle_bg.webp");
+    this.load.image("fog_layer", "/assets/terrain/fog_layer.webp");
 
-    // 載入高清名將立繪卡片圖
+    // 載入高清名將與山賊 2D 透明底角色圖案
     this.load.image("hero_protagonist", "/assets/heroes/protagonist.webp");
     this.load.image("hero_huang_zhong", "/assets/heroes/huang_zhong.webp");
     this.load.image("hero_xiahou_dun", "/assets/heroes/xiahou_dun.webp");

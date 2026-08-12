@@ -8,6 +8,7 @@ import { useBattleStore } from "@/stores/useBattleStore";
 import { useDevStore } from "@/stores/useDevStore";
 import { StoryDialog } from "@/components/game/StoryDialog";
 import { SummonModal } from "@/components/game/SummonModal";
+import { BanditDialogueModal } from "@/components/game/BanditDialogueModal";
 import { InGameHUD } from "@/components/game/InGameHUD";
 import { FanOutHandCards } from "@/components/game/FanOutHandCards";
 import { RadialCommandMenu } from "@/components/game/RadialCommandMenu";
@@ -85,13 +86,13 @@ export default function GamePage() {
   };
 
   const initBattleUnits = useCallback(() => {
-    const heroId = selectedHeroId || SUMMONABLE_HEROES[0].id; // 預設黃忠
+    const heroId = selectedHeroId || SUMMONABLE_HEROES[0].id;
     const playerUnits = [
       buildUnit("u_protagonist", "hero_protagonist", "PLAYER", 0.5, 0.85),
       buildUnit(`u_${heroId}`, heroId, "PLAYER", 0.35, 0.82),
     ];
     const enemyUnits = STAGE_1_BANDIT.enemies.map((e, i) =>
-      buildUnit(`enemy_${i}`, e.heroId, "ENEMY", 0.35 + i * 0.08, 0.2)
+      buildUnit(`enemy_${i}`, e.heroId, "ENEMY", 0.38 + i * 0.06, 0.22 + (i % 2) * 0.05)
     );
     setUnits([...playerUnits, ...enemyUnits]);
     setPhase("DEPLOYMENT");
@@ -120,7 +121,6 @@ export default function GamePage() {
     const unit = units.find((u) => u.instanceId === unitInstanceId);
     if (!unit) return;
 
-    // 檢查是否落在埋伏區多邊形內
     const inAmbush = regions.some(
       (r) => r.type === "AMBUSH" && isPointInPolygon({ x: normX, y: normY }, r.points)
     );
@@ -139,9 +139,22 @@ export default function GamePage() {
     );
 
     addCombatLog(
-      `📍 ${unit.heroConfig.name} 佈陣登場！${inAmbush ? " ✦ 進入草叢伏擊形態！" : ""}`,
+      `📍 ${unit.heroConfig.name} 登場！${inAmbush ? " ✦ 進入草叢伏擊狀態！" : ""}`,
       inAmbush ? "skill" : "info"
     );
+  };
+
+  const handleBanditChoice = (choiceType: "ATTACK" | "AMBUSH" | "GUARD") => {
+    if (choiceType === "AMBUSH") {
+      // 自動將黃忠部署至左側伏擊區 (0.12, 0.72)
+      setUnits(
+        units.map((u) =>
+          u.heroConfig.id === "hero_huang_zhong"
+            ? { ...u, x: 0.12, y: 0.72, statusEffects: ["AMBUSH"] }
+            : u
+        )
+      );
+    }
   };
 
   const handleConfirmSummon = async (hero: HeroConfig) => {
@@ -156,7 +169,7 @@ export default function GamePage() {
 
   const handleStartBattle = () => {
     setPhase("BATTLE_IN_PROGRESS");
-    addCombatLog("⚔️ 兩軍交鋒！黑風山谷遭遇戰開始！", "info");
+    addCombatLog("⚔️ 兩軍交鋒！黑風山谷遭遇戰正式開始！", "info");
     runBattleLoop();
   };
 
@@ -179,7 +192,7 @@ export default function GamePage() {
         )
       );
     } else if (action === "FLEE") {
-      addCombatLog("🏃 全隊向後方陣地撤退！", "info");
+      addCombatLog("🏃 全隊向後方安全區撤退！", "info");
       handleStartBattle();
     }
   };
@@ -237,28 +250,32 @@ export default function GamePage() {
       {/* 1. Phaser 全螢幕 Canvas 底層 */}
       {isMounted && (storyStep === "BATTLE" || storyStep === "COMPLETED") && <PhaserGame />}
 
-      {/* 2. 劇情對話 */}
+      {/* 2. 穿越劇情對話 */}
       {storyStep === "INTRO" && <StoryDialog onComplete={() => setStoryStep("SUMMON")} />}
 
       {/* 3. 4選1名將召喚 */}
       {storyStep === "SUMMON" && <SummonModal onConfirmSummon={handleConfirmSummon} />}
 
-      {/* 4. 全螢幕戰鬥 In-Game HUD 覆蓋層 */}
+      {/* 4. 山賊攔路對白對策 Modal (布陣階段觸發) */}
+      {(storyStep === "BATTLE" || storyStep === "COMPLETED") && (
+        <BanditDialogueModal onConfirmChoice={handleBanditChoice} />
+      )}
+
+      {/* 5. 全螢幕戰鬥 In-Game HUD 覆蓋層 */}
       {(storyStep === "BATTLE" || storyStep === "COMPLETED") && (
         <>
           <InGameHUD
             onStartBattle={handleStartBattle}
             onBaitAction={handleBaitAction}
             onResetDeployment={initBattleUnits}
-            onExecuteAction={handleExecuteAction}
             onReturnHome={() => router.push("/")}
             onExportSave={handleExportSave}
           />
 
-          {/* 5. 底部 GSAP 扇形展開手牌 (布陣階段) */}
+          {/* 6. 底部 GSAP 扇形展開手牌 (布陣階段，獨占底部區域不與按鈕重合) */}
           <FanOutHandCards onPlaceUnit={handlePlaceUnit} />
 
-          {/* 6. 選中卡牌彈出指令輪盤 */}
+          {/* 7. 選中 2D 角色彈出指令輪盤 */}
           {selectedUnitId && selectedUnit && selectedUnit.faction === "PLAYER" && (
             <RadialCommandMenu
               x={selectedUnit.x <= 1 ? selectedUnit.x * window.innerWidth : selectedUnit.x}
@@ -269,12 +286,12 @@ export default function GamePage() {
             />
           )}
 
-          {/* 7. 博德之門3 風格物品欄 (B / TAB 快捷鍵呼出) */}
+          {/* 8. 博德之門 3 風格物品欄 (B / TAB) */}
           <InventoryModal />
         </>
       )}
 
-      {/* 8. 戰鬥結算 Modal */}
+      {/* 9. 戰鬥結算 Modal */}
       <BattleResultModal
         onRestart={() => {
           resetBattle();
