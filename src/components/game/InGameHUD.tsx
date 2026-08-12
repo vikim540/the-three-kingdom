@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useBattleStore } from "@/stores/useBattleStore";
 import { useGameStore } from "@/stores/useGameStore";
 import { TacticalActionType } from "@/types/game";
-import { Menu, RotateCcw, X } from "lucide-react";
+import { Menu, RotateCcw, X, ScrollText } from "lucide-react";
 
 interface InGameHUDProps {
   onStartBattle: () => void;
@@ -34,8 +34,8 @@ export const InGameHUD: React.FC<InGameHUDProps> = ({
 
   const isHuangZhong = selectedHeroId === "hero_huang_zhong";
 
-  // 最新5條日誌
-  const recentLogs = combatLogs.slice(0, 5);
+  // 最新日誌
+  const recentLogs = combatLogs.slice(0, 8);
 
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = 0;
@@ -43,77 +43,85 @@ export const InGameHUD: React.FC<InGameHUDProps> = ({
 
   return (
     <>
-      {/* ─── 頂部左側：回合 + 兵力 ─── */}
-      <div className="fixed top-4 left-4 z-30 flex items-center gap-3 pointer-events-none">
+      {/* ─── 頂部左側：古典金框 [第 1 回合] ─── */}
+      <div className="fixed top-4 left-4 z-30 flex items-start gap-3 pointer-events-none">
         <div
-          style={{ background: "linear-gradient(135deg, rgba(0,0,0,0.75), rgba(0,0,0,0.55))" }}
-          className="px-4 py-2 rounded-xl border border-amber-500/40 backdrop-blur-sm"
+          className="px-5 py-2.5 rounded-xl border-2 border-amber-600/50 shadow-2xl backdrop-blur-md"
+          style={{ background: "linear-gradient(135deg, rgba(15,13,10,0.88), rgba(28,25,23,0.78))" }}
         >
-          <div className="text-amber-300 font-black font-serif-title text-xl leading-none">
-            第 {currentTurn} 回合
+          <div className="text-amber-300 font-black font-serif-title text-2xl tracking-widest flex items-center gap-2">
+            <span>第 {currentTurn} 回合</span>
           </div>
-          <div className="flex items-center gap-3 mt-1 text-xs">
-            <span className="text-sky-400">🔵 我方 {playerAlive}</span>
-            <span className="text-red-400">🔴 敵方 {enemyAlive}</span>
+          <div className="flex items-center gap-4 mt-1.5 text-xs font-bold">
+            <span className="flex items-center gap-1 text-sky-400">
+              <span className="inline-block w-2 h-2 rounded-full bg-sky-400 animate-pulse" />
+              我方：{playerAlive}
+            </span>
+            <span className="flex items-center gap-1 text-red-400">
+              <span className="inline-block w-2 h-2 rounded-full bg-red-400" />
+              敵方：{enemyAlive}
+            </span>
           </div>
-        </div>
-
-        {/* 階段標示 */}
-        <div
-          style={{ background: "rgba(0,0,0,0.65)" }}
-          className="px-3 py-1.5 rounded-lg border border-stone-600/40 backdrop-blur-sm"
-        >
-          <span className="text-xs font-semibold text-stone-300">
-            {phase === "DEPLOYMENT" && "⚑ 布陣中"}
-            {phase === "BATTLE_IN_PROGRESS" && "⚔ 戰鬥中"}
-            {phase === "VICTORY" && "🏆 勝利"}
-            {phase === "DEFEAT" && "💀 戰敗"}
-          </span>
         </div>
       </div>
 
-      {/* ─── 頂部右側：選單按鈕 ─── */}
+      {/* ─── 頂部中央：階段標籤 ─── */}
+      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
+        <div
+          className="px-6 py-1.5 rounded-full border border-amber-500/40 text-amber-200 text-sm font-black font-serif-title tracking-widest shadow-lg backdrop-blur-md flex items-center gap-2"
+          style={{ background: "linear-gradient(180deg, rgba(20,16,10,0.85), rgba(9,9,11,0.9))" }}
+        >
+          <span className="text-amber-400">❖</span>
+          <span>
+            {phase === "DEPLOYMENT" && "布陣中"}
+            {phase === "BATTLE_IN_PROGRESS" && "戰鬥中"}
+            {phase === "VICTORY" && "大獲全勝"}
+            {phase === "DEFEAT" && "戰敗失陷"}
+          </span>
+          <span className="text-amber-400">❖</span>
+        </div>
+      </div>
+
+      {/* ─── 頂部右側：日誌與選單按鈕 ─── */}
       <div className="fixed top-4 right-4 z-40 flex items-center gap-2">
         <button
           onClick={() => setShowLog((v) => !v)}
-          style={{ background: "rgba(0,0,0,0.7)" }}
-          className="p-2.5 rounded-xl border border-stone-600/40 text-stone-300 hover:text-amber-300 hover:border-amber-500/40 transition backdrop-blur-sm"
+          className="p-2.5 rounded-xl border border-stone-600/50 text-stone-200 hover:text-amber-300 hover:border-amber-500/60 transition backdrop-blur-md shadow-lg"
+          style={{ background: "rgba(15,13,10,0.82)" }}
           title="戰鬥日誌"
         >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h8" />
-          </svg>
+          <ScrollText className="w-5 h-5" />
         </button>
         <button
           onClick={() => setShowMenu((v) => !v)}
-          style={{ background: "rgba(0,0,0,0.7)" }}
-          className="p-2.5 rounded-xl border border-stone-600/40 text-stone-300 hover:text-amber-300 hover:border-amber-500/40 transition backdrop-blur-sm"
+          className="p-2.5 rounded-xl border border-stone-600/50 text-stone-200 hover:text-amber-300 hover:border-amber-500/60 transition backdrop-blur-md shadow-lg"
+          style={{ background: "rgba(15,13,10,0.82)" }}
         >
-          {showMenu ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+          {showMenu ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
         </button>
       </div>
 
       {/* ─── 選單下拉 ─── */}
       {showMenu && (
         <div
-          className="fixed top-16 right-4 z-50 w-44 rounded-xl overflow-hidden border border-stone-700/60 shadow-2xl"
-          style={{ background: "rgba(9,9,11,0.92)", backdropFilter: "blur(12px)" }}
+          className="fixed top-16 right-4 z-50 w-48 rounded-xl overflow-hidden border-2 border-amber-600/40 shadow-2xl"
+          style={{ background: "rgba(15,13,10,0.95)", backdropFilter: "blur(16px)" }}
         >
           <button
             onClick={() => { onExportSave(); setShowMenu(false); }}
-            className="w-full px-4 py-3 text-left text-xs text-stone-200 hover:bg-amber-500/20 hover:text-amber-300 transition border-b border-stone-800"
+            className="w-full px-4 py-3 text-left text-xs font-semibold text-stone-200 hover:bg-amber-500/20 hover:text-amber-300 transition border-b border-stone-800"
           >
-            💾 儲存進度
+            💾 儲存修仙進度
           </button>
           <button
             onClick={() => { onResetDeployment(); setShowMenu(false); }}
-            className="w-full px-4 py-3 text-left text-xs text-stone-200 hover:bg-amber-500/20 hover:text-amber-300 transition border-b border-stone-800 flex items-center gap-2"
+            className="w-full px-4 py-3 text-left text-xs font-semibold text-stone-200 hover:bg-amber-500/20 hover:text-amber-300 transition border-b border-stone-800 flex items-center gap-2"
           >
-            <RotateCcw className="w-3.5 h-3.5" /> 重置布陣
+            <RotateCcw className="w-3.5 h-3.5" /> 重置名將布陣
           </button>
           <button
             onClick={() => { onReturnHome(); setShowMenu(false); }}
-            className="w-full px-4 py-3 text-left text-xs text-red-400 hover:bg-red-500/20 transition"
+            className="w-full px-4 py-3 text-left text-xs font-semibold text-red-400 hover:bg-red-500/20 transition"
           >
             ← 返回主選單
           </button>
@@ -123,107 +131,116 @@ export const InGameHUD: React.FC<InGameHUDProps> = ({
       {/* ─── 戰鬥日誌浮層 ─── */}
       {showLog && (
         <div
-          className="fixed top-16 right-16 z-50 w-72 max-h-52 overflow-y-auto rounded-xl border border-stone-700/50 shadow-2xl"
-          style={{ background: "rgba(9,9,11,0.88)", backdropFilter: "blur(12px)" }}
+          className="fixed top-16 right-16 z-50 w-80 max-h-64 overflow-y-auto rounded-xl border-2 border-stone-700/60 shadow-2xl"
+          style={{ background: "rgba(12,10,9,0.92)", backdropFilter: "blur(14px)" }}
           ref={logRef}
         >
-          <div className="px-3 py-2 border-b border-stone-800 text-xs text-amber-400 font-bold">戰鬥日誌</div>
-          <div className="p-2 space-y-0.5">
+          <div className="px-4 py-2.5 border-b border-stone-800 text-xs font-bold text-amber-400 flex items-center justify-between">
+            <span>📜 戰鬥與伏擊日誌</span>
+            <span className="text-[10px] text-stone-500">即時更新</span>
+          </div>
+          <div className="p-2 space-y-1">
             {recentLogs.map((log) => (
-              <div key={log.id} className={`text-[11px] leading-snug px-2 py-1 rounded ${
-                log.type === "damage" ? "text-red-300" :
-                log.type === "skill" ? "text-amber-300" :
-                log.type === "victory" ? "text-emerald-300" :
-                "text-stone-400"
+              <div key={log.id} className={`text-xs leading-relaxed px-2.5 py-1.5 rounded border ${
+                log.type === "damage" ? "bg-red-950/30 text-red-300 border-red-900/40" :
+                log.type === "skill" ? "bg-amber-950/30 text-amber-300 border-amber-900/40" :
+                log.type === "victory" ? "bg-emerald-950/30 text-emerald-300 border-emerald-900/40" :
+                "bg-stone-900/40 text-stone-300 border-stone-800/40"
               }`}>
                 {log.text}
               </div>
             ))}
             {recentLogs.length === 0 && (
-              <div className="text-xs text-stone-600 p-2">尚無戰鬥記錄</div>
+              <div className="text-xs text-stone-500 p-3 text-center">尚無戰鬥記錄</div>
             )}
           </div>
         </div>
       )}
 
-      {/* ─── 布陣階段提示（黃忠路線）── 小型浮動文字 ─── */}
-      {phase === "DEPLOYMENT" && isHuangZhong && (
+      {/* ─── 左側古典提示氣泡（黃忠伏擊提示） ─── */}
+      {phase === "DEPLOYMENT" && (
         <div
-          className="fixed top-1/2 left-4 -translate-y-1/2 z-30 max-w-[160px] pointer-events-none"
-          style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(8px)" }}
+          className="fixed top-1/3 left-4 z-30 max-w-[210px] pointer-events-none animate-fade-in"
         >
-          <div className="px-3 py-2 rounded-xl border border-amber-500/30 text-amber-200 text-[11px] leading-relaxed">
-            💡 將<strong className="text-amber-300">黃忠</strong>拖至<span className="text-emerald-400">草叢</span>可觸發致命一箭！
+          <div
+            className="p-3.5 rounded-xl border-2 border-amber-600/60 shadow-2xl backdrop-blur-md flex items-start gap-2.5"
+            style={{ background: "linear-gradient(135deg, rgba(24,19,15,0.9), rgba(12,10,9,0.85))" }}
+          >
+            <span className="text-2xl mt-0.5">🏮</span>
+            <div className="text-xs leading-relaxed text-stone-200">
+              {isHuangZhong ? (
+                <>
+                  將<strong className="text-amber-300">黃忠</strong>拖至側翼<span className="text-emerald-400">草叢</span>，可觸發一箭秒殺敵首！
+                </>
+              ) : (
+                <>
+                  拖拽近處名將進行卡牌布陣，按<strong className="text-emerald-400">【開陣】</strong>開始戰鬥！
+                </>
+              )}
+            </div>
           </div>
         </div>
       )}
 
-      {/* ─── 底部主操作 HUD ─── */}
-      <div className="fixed bottom-0 left-0 right-0 z-30">
-        {/* 背景遮罩漸層 */}
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{ background: "linear-gradient(to top, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.6) 60%, transparent 100%)" }}
-        />
+      {/* ─── 底部古典大按鈕操作區 (匹配參考原型圖) ─── */}
+      <div className="fixed bottom-4 left-0 right-0 z-30 flex items-center justify-center pointer-events-none">
+        <div className="pointer-events-auto flex items-center gap-6 px-6 py-2">
 
-        <div className="relative z-10 flex items-end justify-center gap-4 px-6 pb-5 pt-8">
-
-          {/* 布陣階段動作 */}
+          {/* 布陣階段按鈕 */}
           {phase === "DEPLOYMENT" && (
             <>
               {isHuangZhong && (
                 <button
                   onClick={onBaitAction}
-                  className="group flex flex-col items-center gap-1.5 px-5 py-3 rounded-xl border-2 border-amber-500/70 transition-all duration-200 hover:scale-110 active:scale-95"
+                  className="group relative flex items-center gap-3 px-8 py-3.5 rounded-2xl border-2 border-amber-500/80 font-black font-serif-title text-base text-amber-100 shadow-[0_0_25px_rgba(245,158,11,0.4)] transition-all duration-200 hover:scale-105 active:scale-95"
                   style={{
-                    background: "linear-gradient(135deg, rgba(180,83,9,0.85), rgba(146,64,14,0.7))",
-                    boxShadow: "0 0 20px rgba(245,158,11,0.4)",
+                    background: "linear-gradient(135deg, rgba(120,40,10,0.92), rgba(180,70,15,0.85))",
                   }}
                 >
                   <span className="text-2xl">🏹</span>
-                  <span className="text-amber-200 text-xs font-bold tracking-wide">假逃誘敵</span>
+                  <span className="tracking-widest text-shadow">假逃誘敵</span>
                 </button>
               )}
 
               <button
                 onClick={onStartBattle}
-                className="group flex flex-col items-center gap-1.5 px-8 py-3.5 rounded-xl border-2 border-emerald-500/80 transition-all duration-200 hover:scale-110 active:scale-95"
+                className="group relative flex items-center gap-3 px-10 py-3.5 rounded-2xl border-2 border-emerald-400/90 font-black font-serif-title text-lg text-emerald-100 shadow-[0_0_30px_rgba(16,185,129,0.5)] transition-all duration-200 hover:scale-105 active:scale-95"
                 style={{
-                  background: "linear-gradient(135deg, rgba(5,100,62,0.9), rgba(6,78,59,0.75))",
-                  boxShadow: "0 0 25px rgba(16,185,129,0.5)",
+                  background: "linear-gradient(135deg, rgba(6,78,59,0.95), rgba(4,120,87,0.88))",
                 }}
               >
                 <span className="text-2xl">⚔️</span>
-                <span className="text-emerald-200 text-sm font-black tracking-widest font-serif-title">開陣！</span>
+                <span className="tracking-widest text-shadow">開陣！</span>
               </button>
             </>
           )}
 
-          {/* 戰鬥中動作指令 */}
+          {/* 戰鬥進行中動作指令 */}
           {phase === "BATTLE_IN_PROGRESS" && (
-            <>
+            <div className="flex items-center gap-3">
               {[
-                { action: "ATTACK" as TacticalActionType, icon: "⚔️", label: "普攻", color: "rgba(185,28,28,0.85)", border: "rgba(239,68,68,0.8)", glow: "rgba(239,68,68,0.4)" },
-                { action: "SKILL" as TacticalActionType, icon: "🔮", label: "神通", color: "rgba(146,64,14,0.85)", border: "rgba(245,158,11,0.8)", glow: "rgba(245,158,11,0.4)" },
-                { action: "ITEM" as TacticalActionType, icon: "🧪", label: "丹藥", color: "rgba(6,78,59,0.85)", border: "rgba(16,185,129,0.8)", glow: "rgba(16,185,129,0.4)" },
-                { action: "FLEE" as TacticalActionType, icon: "🏃", label: "撤退", color: "rgba(7,89,133,0.85)", border: "rgba(56,189,248,0.8)", glow: "rgba(56,189,248,0.4)" },
-              ].map(({ action, icon, label, color, border, glow }) => (
+                { action: "ATTACK" as TacticalActionType, icon: "⚔️", label: "普攻", bg: "linear-gradient(135deg, rgba(153,27,27,0.9), rgba(185,28,28,0.8))", border: "rgba(239,68,68,0.8)", glow: "rgba(239,68,68,0.4)" },
+                { action: "SKILL" as TacticalActionType, icon: "🔮", label: "神通", bg: "linear-gradient(135deg, rgba(146,64,14,0.9), rgba(180,83,9,0.8))", border: "rgba(245,158,11,0.8)", glow: "rgba(245,158,11,0.4)" },
+                { action: "ITEM" as TacticalActionType, icon: "🧪", label: "丹藥", bg: "linear-gradient(135deg, rgba(6,78,59,0.9), rgba(4,120,87,0.8))", border: "rgba(16,185,129,0.8)", glow: "rgba(16,185,129,0.4)" },
+                { action: "FLEE" as TacticalActionType, icon: "🏃", label: "撤退", bg: "linear-gradient(135deg, rgba(12,74,110,0.9), rgba(14,116,144,0.8))", border: "rgba(56,189,248,0.8)", glow: "rgba(56,189,248,0.4)" },
+              ].map(({ action, icon, label, bg, border, glow }) => (
                 <button
                   key={action}
                   onClick={() => onExecuteAction(action)}
-                  className="group flex flex-col items-center gap-1.5 w-20 py-3 rounded-xl border-2 transition-all duration-200 hover:scale-110 active:scale-95"
+                  className="group flex flex-col items-center justify-center gap-1 w-20 h-20 rounded-2xl border-2 transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg"
                   style={{
-                    background: activeAction === action ? `rgba(255,255,255,0.15)` : color,
+                    background: activeAction === action ? "rgba(255,255,255,0.25)" : bg,
                     borderColor: border,
-                    boxShadow: activeAction === action ? `0 0 25px ${glow}, inset 0 0 15px rgba(255,255,255,0.1)` : `0 0 12px ${glow}`,
+                    boxShadow: activeAction === action ? `0 0 25px ${glow}, inset 0 0 15px rgba(255,255,255,0.2)` : `0 0 12px ${glow}`,
                   }}
                 >
                   <span className="text-2xl">{icon}</span>
                   <span className="text-white text-xs font-bold tracking-wider">{label}</span>
                 </button>
               ))}
-            </>
+            </div>
           )}
+
         </div>
       </div>
     </>
