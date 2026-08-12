@@ -7,22 +7,28 @@ import { useGameStore, StoryStep } from "@/stores/useGameStore";
 import { useBattleStore } from "@/stores/useBattleStore";
 import { StoryDialog } from "@/components/game/StoryDialog";
 import { SummonModal } from "@/components/game/SummonModal";
-import { BattleHUD } from "@/components/game/BattleHUD";
-import { CombatLog } from "@/components/game/CombatLog";
+import { InGameHUD } from "@/components/game/InGameHUD";
 import { BattleResultModal } from "@/components/game/BattleResultModal";
 import { HeroConfig } from "@/types/hero";
 import { BattleUnit, TacticalActionType } from "@/types/game";
 import { STAGE_1_BANDIT } from "@/game/config/stages";
-import { PROTAGONIST_HERO, SUMMONABLE_HEROES, ENEMY_BANDIT_CHIEF, ENEMY_BANDIT_THUG } from "@/game/config/heroes";
+import {
+  PROTAGONIST_HERO,
+  SUMMONABLE_HEROES,
+  ENEMY_BANDIT_CHIEF,
+  ENEMY_BANDIT_THUG,
+} from "@/game/config/heroes";
 import { executeBattleStep } from "@/game/systems/CombatSystem";
-import { Home, Save } from "lucide-react";
 
-// Phaser 必須使用 next/dynamic 並設定 ssr: false 動態載入
+// Phaser 全螢幕 Canvas（fixed inset-0）
 const PhaserGame = dynamic(() => import("@/game/PhaserGame"), {
   ssr: false,
   loading: () => (
-    <div className="w-[288px] h-[720px] rounded-xl bg-zinc-900 flex items-center justify-center text-amber-400 text-sm font-semibold border border-amber-500/30 animate-pulse">
-      ⚔️ 載入 4×10 密林戰場...
+    <div className="fixed inset-0 bg-zinc-950 flex flex-col items-center justify-center gap-4">
+      <div className="text-4xl animate-bounce">⚔️</div>
+      <div className="text-amber-400 font-bold font-serif-title text-xl tracking-widest animate-pulse">
+        黑風山谷 正在顯現...
+      </div>
     </div>
   ),
 });
@@ -31,272 +37,185 @@ export default function GamePage() {
   const router = useRouter();
   const { storyStep, selectedHeroId, setStoryStep, setSelectedHeroId } = useGameStore();
   const {
-    units,
-    setPhase,
-    setUnits,
-    setActiveAction,
-    addCombatLog,
-    setReward,
-    setTacticalOutcome,
-    resetBattle,
+    units, setPhase, setUnits, setActiveAction,
+    addCombatLog, setReward, setTacticalOutcome, resetBattle,
   } = useBattleStore();
 
   const [loading, setLoading] = useState(true);
 
-  // 初始化 4x10 戰鬥單位 (主角 + 召喚名將 + 5 劫匪)
+  const buildUnit = (id: string, heroId: string, faction: "PLAYER" | "ENEMY", x: number, y: number): BattleUnit => {
+    const heroConfigs: Record<string, typeof PROTAGONIST_HERO> = {
+      hero_protagonist: PROTAGONIST_HERO,
+      hero_huang_zhong: SUMMONABLE_HEROES.find((h) => h.id === "hero_huang_zhong")!,
+      hero_xiahou_dun: SUMMONABLE_HEROES.find((h) => h.id === "hero_xiahou_dun")!,
+      hero_zhao_yun: SUMMONABLE_HEROES.find((h) => h.id === "hero_zhao_yun")!,
+      hero_guo_jia: SUMMONABLE_HEROES.find((h) => h.id === "hero_guo_jia")!,
+      enemy_bandit_chief: ENEMY_BANDIT_CHIEF,
+      enemy_bandit_thug: ENEMY_BANDIT_THUG,
+    };
+    const cfg = heroConfigs[heroId] || PROTAGONIST_HERO;
+    return {
+      instanceId: id,
+      heroConfig: cfg,
+      faction,
+      x, y,
+      currentHp: cfg.baseStats.hp,
+      maxHp: cfg.baseStats.hp,
+      atk: cfg.baseStats.atk,
+      def: cfg.baseStats.def,
+      speed: cfg.baseStats.speed,
+      moveRange: cfg.baseStats.moveRange,
+      attackRange: cfg.baseStats.attackRange,
+      statusEffects: [],
+      hasActedThisTurn: false,
+      isDead: false,
+    };
+  };
+
   const initBattleUnits = useCallback(() => {
-    const heroToSummon =
-      SUMMONABLE_HEROES.find((h) => h.id === selectedHeroId) || SUMMONABLE_HEROES[0];
-
-    const playerUnits: BattleUnit[] = [
-      {
-        instanceId: "u_protagonist",
-        heroConfig: PROTAGONIST_HERO,
-        faction: "PLAYER",
-        x: STAGE_1_BANDIT.playerSpawnTiles[0].x,
-        y: STAGE_1_BANDIT.playerSpawnTiles[0].y,
-        currentHp: PROTAGONIST_HERO.baseStats.hp,
-        maxHp: PROTAGONIST_HERO.baseStats.hp,
-        atk: PROTAGONIST_HERO.baseStats.atk,
-        def: PROTAGONIST_HERO.baseStats.def,
-        speed: PROTAGONIST_HERO.baseStats.speed,
-        moveRange: PROTAGONIST_HERO.baseStats.moveRange,
-        attackRange: PROTAGONIST_HERO.baseStats.attackRange,
-        statusEffects: [],
-        hasActedThisTurn: false,
-        isDead: false,
-      },
-      {
-        instanceId: `u_${heroToSummon.id}`,
-        heroConfig: heroToSummon,
-        faction: "PLAYER",
-        x: STAGE_1_BANDIT.playerSpawnTiles[1].x,
-        y: STAGE_1_BANDIT.playerSpawnTiles[1].y,
-        currentHp: heroToSummon.baseStats.hp,
-        maxHp: heroToSummon.baseStats.hp,
-        atk: heroToSummon.baseStats.atk,
-        def: heroToSummon.baseStats.def,
-        speed: heroToSummon.baseStats.speed,
-        moveRange: heroToSummon.baseStats.moveRange,
-        attackRange: heroToSummon.baseStats.attackRange,
-        statusEffects: [],
-        hasActedThisTurn: false,
-        isDead: false,
-      },
+    const heroId = selectedHeroId || SUMMONABLE_HEROES[0].id;
+    const playerUnits = [
+      buildUnit("u_protagonist", "hero_protagonist", "PLAYER", STAGE_1_BANDIT.playerSpawnTiles[0].x, STAGE_1_BANDIT.playerSpawnTiles[0].y),
+      buildUnit(`u_${heroId}`, heroId, "PLAYER", STAGE_1_BANDIT.playerSpawnTiles[1].x, STAGE_1_BANDIT.playerSpawnTiles[1].y),
     ];
-
-    const enemyUnits: BattleUnit[] = STAGE_1_BANDIT.enemies.map((e, idx) => {
-      const cfg = e.heroId === "enemy_bandit_chief" ? ENEMY_BANDIT_CHIEF : ENEMY_BANDIT_THUG;
-      return {
-        instanceId: `enemy_${idx}`,
-        heroConfig: cfg,
-        faction: "ENEMY",
-        x: e.x,
-        y: e.y,
-        currentHp: cfg.baseStats.hp,
-        maxHp: cfg.baseStats.hp,
-        atk: cfg.baseStats.atk,
-        def: cfg.baseStats.def,
-        speed: cfg.baseStats.speed,
-        moveRange: cfg.baseStats.moveRange,
-        attackRange: cfg.baseStats.attackRange,
-        statusEffects: [],
-        hasActedThisTurn: false,
-        isDead: false,
-      };
-    });
-
+    const enemyUnits = STAGE_1_BANDIT.enemies.map((e, i) =>
+      buildUnit(`enemy_${i}`, e.heroId, "ENEMY", e.x, e.y)
+    );
     setUnits([...playerUnits, ...enemyUnits]);
     setPhase("DEPLOYMENT");
-    addCombatLog("⚔️ 已進入黑風山谷 4×10 戰場！可在地圖直接拖拽擺位。", "info");
-  }, [selectedHeroId, setUnits, setPhase, addCombatLog]);
+  }, [selectedHeroId, setUnits, setPhase]);
 
-  // 初始化或載入 SQLite 存檔
+  // 載入存檔
   useEffect(() => {
     fetch("/api/save")
-      .then((res) => res.json())
+      .then((r) => r.json())
       .then((data) => {
         if (data.success && data.save) {
-          const save = data.save;
-          if (save.selectedHeroId) setSelectedHeroId(save.selectedHeroId);
-          if (save.storyStep) setStoryStep(save.storyStep as StoryStep);
+          if (data.save.selectedHeroId) setSelectedHeroId(data.save.selectedHeroId);
+          if (data.save.storyStep) setStoryStep(data.save.storyStep as StoryStep);
         }
       })
-      .catch((err) => console.error(err))
+      .catch(console.error)
       .finally(() => setLoading(false));
   }, [setSelectedHeroId, setStoryStep]);
 
   useEffect(() => {
-    if (storyStep === "BATTLE" && units.length === 0) {
-      initBattleUnits();
-    }
+    if (storyStep === "BATTLE" && units.length === 0) initBattleUnits();
   }, [storyStep, units.length, initBattleUnits]);
-
-  const handleStoryComplete = () => {
-    setStoryStep("SUMMON");
-  };
 
   const handleConfirmSummon = async (hero: HeroConfig) => {
     setSelectedHeroId(hero.id);
     setStoryStep("BATTLE");
-
     await fetch("/api/save", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        selectedHeroId: hero.id,
-        storyStep: "BATTLE",
-        gameData: { heroName: hero.name },
-      }),
+      body: JSON.stringify({ selectedHeroId: hero.id, storyStep: "BATTLE", gameData: {} }),
     });
   };
 
   const handleStartBattle = () => {
     setPhase("BATTLE_IN_PROGRESS");
-    addCombatLog("🚀 開陣！兩軍在狹長山道正式交鋒！", "info");
+    addCombatLog("⚔️ 兩軍交鋒！黑風山谷之戰開始！", "info");
     runBattleLoop();
   };
 
   const handleBaitAction = () => {
-    addCombatLog("🏃 主角大喝【以身作餌】：『劫匪休走！有膽追我！』", "skill");
+    addCombatLog("🏹 黃忠蟄伏草叢，主角施展假逃誘敵之計！", "skill");
     handleStartBattle();
-  };
-
-  const handleResetDeployment = () => {
-    initBattleUnits();
   };
 
   const handleExecuteAction = (action: TacticalActionType) => {
     setActiveAction(action);
     if (action === "ITEM") {
-      addCombatLog("🧪 服用【紫霄修仙丹】：恢復全隊 50 點生命值！", "skill");
-      setUnits(
-        units.map((u) =>
-          u.faction === "PLAYER" && !u.isDead
-            ? { ...u, currentHp: Math.min(u.maxHp, u.currentHp + 50) }
-            : u
-        )
-      );
+      addCombatLog("🧪 服用紫霄丹，恢復 50 生命！", "skill");
+      setUnits(units.map((u) =>
+        u.faction === "PLAYER" && !u.isDead
+          ? { ...u, currentHp: Math.min(u.maxHp, u.currentHp + 50) }
+          : u
+      ));
     } else if (action === "FLEE") {
-      addCombatLog("🏃 主角隊伍向底部 (1,9) 逃生法陣撤退！", "info");
+      addCombatLog("🏃 向逃生法陣撤退！", "info");
       handleStartBattle();
     }
+  };
+
+  const handleExportSave = () => {
+    const blob = new Blob([JSON.stringify({ selectedHeroId, storyStep, exportedAt: new Date().toISOString() }, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `sgxian_save_${Date.now()}.json`;
+    a.click();
   };
 
   const runBattleLoop = () => {
     let turn = 1;
     const interval = setInterval(() => {
       const currentUnits = useBattleStore.getState().units;
-      const stepResult = executeBattleStep(currentUnits, turn);
-
-      stepResult.logs.forEach((log) => addCombatLog(log.text, log.type));
-      setUnits(stepResult.updatedUnits);
-
-      if (stepResult.isFinished) {
+      const result = executeBattleStep(currentUnits, turn);
+      result.logs.forEach((l) => addCombatLog(l.text, l.type));
+      setUnits(result.updatedUnits);
+      if (result.isFinished || turn >= 15) {
         clearInterval(interval);
-        if (stepResult.outcome) setTacticalOutcome(stepResult.outcome);
-        if (stepResult.reward) {
-          setReward(stepResult.reward);
+        if (result.outcome) setTacticalOutcome(result.outcome);
+        if (result.reward) {
+          setReward(result.reward);
           setPhase("VICTORY");
           setStoryStep("COMPLETED");
         } else {
           setPhase("DEFEAT");
         }
       }
-
       turn++;
-      if (turn > 15) {
-        clearInterval(interval);
-      }
     }, 1000);
   };
 
-  const handleExportSave = () => {
-    const saveObj = {
-      selectedHeroId,
-      storyStep,
-      units,
-      exportedAt: new Date().toISOString(),
-    };
-    const blob = new Blob([JSON.stringify(saveObj, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `three_kingdoms_save_${Date.now()}.json`;
-    a.click();
-  };
-
+  // ── 載入畫面 ──
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-zinc-950 text-amber-400 font-bold text-lg">
-        ⚡ 正在初始化 4×10 三國修仙戰場...
+      <div className="fixed inset-0 bg-zinc-950 flex flex-col items-center justify-center gap-4">
+        <div className="text-5xl animate-spin">☯</div>
+        <div className="text-amber-400 font-bold font-serif-title text-2xl tracking-widest">
+          修仙戰場召喚中...
+        </div>
       </div>
     );
   }
 
   return (
-    <main className="min-h-screen p-3 md:p-5 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-zinc-900 via-zinc-950 to-black text-stone-100 flex flex-col">
-      {/* 頂部輕量選單欄 */}
-      <header className="flex items-center justify-between mb-3 pb-2 border-b border-zinc-800">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => router.push("/")}
-            className="p-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-stone-300 transition border border-zinc-700"
-            title="返回主選單"
-          >
-            <Home className="w-4 h-4" />
-          </button>
-          <h1 className="text-lg font-black font-serif-title text-amber-400 tracking-wider">三國修仙 • 第一章黑風山谷</h1>
-        </div>
+    // fixed inset-0 → 全螢幕沉浸式容器，無任何 padding、header
+    <div className="fixed inset-0 overflow-hidden bg-black">
 
-        <button
-          onClick={handleExportSave}
-          className="px-3 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-xs font-semibold text-amber-300 flex items-center gap-1 transition"
-        >
-          <Save className="w-3.5 h-3.5" />
-          <span>匯出存檔</span>
-        </button>
-      </header>
+      {/* Phaser 全螢幕 Canvas 底層 */}
+      {(storyStep === "BATTLE" || storyStep === "COMPLETED") && <PhaserGame />}
 
-      {/* 穿越劇情對話框 (含右上角跳過按鈕) */}
-      {storyStep === "INTRO" && <StoryDialog onComplete={handleStoryComplete} />}
-
-      {/* 第一次 4 選 1 召喚 */}
-      {storyStep === "SUMMON" && <SummonModal onConfirmSummon={handleConfirmSummon} />}
-
-      {/* 全屏式 4x10 戰術沉浸戰場 */}
-      {(storyStep === "BATTLE" || storyStep === "COMPLETED") && (
-        <div className="flex-1 max-w-6xl w-full mx-auto flex flex-col gap-3">
-          <BattleHUD
-            onStartBattle={handleStartBattle}
-            onBaitAction={handleBaitAction}
-            onResetDeployment={handleResetDeployment}
-            onExecuteAction={handleExecuteAction}
-          />
-
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-start flex-1">
-            {/* 左側：4×10 格子 2D 戰術畫布 (支援拖拽擺位) */}
-            <div className="md:col-span-5 flex justify-center">
-              <PhaserGame />
-            </div>
-
-            {/* 右側：修仙戰鬥日誌 */}
-            <div className="md:col-span-7 h-full min-h-[500px]">
-              <CombatLog />
-            </div>
-          </div>
-        </div>
+      {/* 劇情對話（全螢幕覆蓋層） */}
+      {storyStep === "INTRO" && (
+        <StoryDialog onComplete={() => setStoryStep("SUMMON")} />
       )}
 
-      {/* 結算獎勵 Modal */}
+      {/* 4 選 1 召喚（全螢幕覆蓋層） */}
+      {storyStep === "SUMMON" && (
+        <SummonModal onConfirmSummon={handleConfirmSummon} />
+      )}
+
+      {/* 全螢幕戰鬥 In-Game HUD（只在戰鬥時顯示） */}
+      {(storyStep === "BATTLE" || storyStep === "COMPLETED") && (
+        <InGameHUD
+          onStartBattle={handleStartBattle}
+          onBaitAction={handleBaitAction}
+          onResetDeployment={initBattleUnits}
+          onExecuteAction={handleExecuteAction}
+          onReturnHome={() => router.push("/")}
+          onExportSave={handleExportSave}
+        />
+      )}
+
+      {/* 戰鬥結算 Modal */}
       <BattleResultModal
-        onRestart={() => {
-          resetBattle();
-          initBattleUnits();
-        }}
+        onRestart={() => { resetBattle(); initBattleUnits(); }}
         onReturnHome={() => router.push("/")}
         onExportSave={handleExportSave}
       />
-    </main>
+    </div>
   );
 }
