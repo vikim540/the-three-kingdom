@@ -9,22 +9,38 @@ export async function GET() {
     await ensureDbInitialized();
     const saves = await db.select().from(saveFiles).limit(1);
     if (saves.length === 0) {
-      return NextResponse.json({ success: true, save: null });
+      return NextResponse.json({ success: true, save: null, gameData: {} });
     }
     const save = saves[0];
-    const gameData = JSON.parse(save.gameDataJson);
+    let gameData = {};
+    if (save && save.gameDataJson) {
+      try {
+        gameData = JSON.parse(save.gameDataJson);
+      } catch (err) {
+        console.warn("存檔 gameDataJson 解析異常，使用預設空物件:", err);
+        gameData = {};
+      }
+    }
     return NextResponse.json({ success: true, save, gameData });
   } catch (error) {
     console.error("Failed to load save:", error);
-    return NextResponse.json({ success: false, error: "無法讀取存檔" }, { status: 500 });
+    // 即使資料庫讀取異常，亦傳回 safe response，避免前端拋出 500 崩潰
+    return NextResponse.json({ success: true, save: null, gameData: {}, warning: "資料庫尚未就緒" });
   }
 }
 
 export async function POST(req: Request) {
   try {
     await ensureDbInitialized();
-    const body = await req.json();
-    const { selectedHeroId, storyStep, gameData } = body;
+    let body: Record<string, unknown> = {};
+    try {
+      body = (await req.json()) as Record<string, unknown>;
+    } catch {
+      body = {};
+    }
+    const selectedHeroId = typeof body.selectedHeroId === "string" ? body.selectedHeroId : undefined;
+    const storyStep = typeof body.storyStep === "string" ? body.storyStep : undefined;
+    const gameData = body.gameData;
 
     const saves = await db.select().from(saveFiles).limit(1);
     const now = new Date().toISOString();
