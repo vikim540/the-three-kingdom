@@ -1,10 +1,11 @@
 import { create } from "zustand";
-import { BattleUnit, BattlePhase, CombatLogMessage, BattleReward } from "@/types/game";
+import { BattleUnit, BattlePhase, CombatLogMessage, BattleReward, TacticalActionType } from "@/types/game";
 
 interface BattleState {
   phase: BattlePhase;
   units: BattleUnit[];
   selectedUnitId: string | null;
+  activeAction: TacticalActionType;
   currentTurn: number;
   combatLogs: CombatLogMessage[];
   reward: BattleReward | null;
@@ -14,6 +15,7 @@ interface BattleState {
   setUnits: (units: BattleUnit[]) => void;
   updateUnitPosition: (instanceId: string, x: number, y: number) => void;
   setSelectedUnitId: (id: string | null) => void;
+  setActiveAction: (action: TacticalActionType) => void;
   addCombatLog: (text: string, type?: CombatLogMessage["type"]) => void;
   setReward: (reward: BattleReward | null) => void;
   setTacticalOutcome: (outcome: "AMBUSH" | "GUARD" | "STANDARD") => void;
@@ -24,6 +26,7 @@ export const useBattleStore = create<BattleState>((set, get) => ({
   phase: "DEPLOYMENT",
   units: [],
   selectedUnitId: null,
+  activeAction: "SELECT",
   currentTurn: 1,
   combatLogs: [],
   reward: null,
@@ -39,6 +42,7 @@ export const useBattleStore = create<BattleState>((set, get) => ({
   },
 
   setSelectedUnitId: (id) => set({ selectedUnitId: id }),
+  setActiveAction: (action) => set({ activeAction: action }),
 
   addCombatLog: (text, type = "info") => {
     const newLog: CombatLogMessage = {
@@ -61,6 +65,7 @@ export const useBattleStore = create<BattleState>((set, get) => ({
       phase: "DEPLOYMENT",
       units: [],
       selectedUnitId: null,
+      activeAction: "SELECT",
       currentTurn: 1,
       combatLogs: [],
       reward: null,

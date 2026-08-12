@@ -1,5 +1,5 @@
 import * as Phaser from "phaser";
-import { TILE_SIZE, MAP_SIZE } from "../config/constants";
+import { TILE_SIZE, MAP_COLS, MAP_ROWS } from "../config/constants";
 
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -7,7 +7,8 @@ export class BootScene extends Phaser.Scene {
   }
 
   preload() {
-    // 預載入 2D 高清背景與人物美術圖案
+    // 預載入 16:9 高清修仙密林山道戰場背景與 2D 人物圖案
+    this.load.image("forest_path_bg", "/assets/terrain/forest_path_bg.webp");
     this.load.image("battle_bg", "/assets/terrain/battle_bg.webp");
     this.load.image("hero_protagonist", "/assets/heroes/protagonist.webp");
     this.load.image("hero_huang_zhong", "/assets/heroes/huang_zhong.webp");
@@ -24,28 +25,21 @@ export class BootScene extends Phaser.Scene {
   }
 
   private createTextureGraphics() {
-    const canvasSize = MAP_SIZE * TILE_SIZE; // 512px
+    const canvasW = MAP_COLS * TILE_SIZE; // 288px
+    const canvasH = MAP_ROWS * TILE_SIZE; // 720px
 
-    // 0. 玄幻戰場山水背景備用圖案 (備用向量藝術)
+    // 0. 備用山道水墨牆面圖案
     const bgG = this.make.graphics({ x: 0, y: 0 });
-    bgG.fillGradientStyle(0x0f172a, 0x1e1b4b, 0x064e3b, 0x0284c7, 1);
-    bgG.fillRect(0, 0, canvasSize, canvasSize);
-    bgG.lineStyle(1, 0x38bdf8, 0.2);
-    for (let i = 0; i < canvasSize; i += 32) {
-      bgG.lineBetween(i, 0, i, canvasSize);
-      bgG.lineBetween(0, i, canvasSize, i);
-    }
-    bgG.generateTexture("fallback_bg", canvasSize, canvasSize);
+    bgG.fillGradientStyle(0x064e3b, 0x0284c7, 0x0f172a, 0x1e1b4b, 1);
+    bgG.fillRect(0, 0, canvasW, canvasH);
+    bgG.generateTexture("fallback_bg", canvasW, canvasH);
 
-    // 1. 普通平地圖案 (青石古陣紋理)
+    // 1. 普通山間小道 (泥黃色古徑)
     const normalG = this.make.graphics({ x: 0, y: 0 });
-    normalG.fillStyle(0x1e293b, 0.95);
+    normalG.fillStyle(0x3f2e21, 0.9);
     normalG.fillRect(0, 0, TILE_SIZE, TILE_SIZE);
-    normalG.lineStyle(2, 0x475569, 0.8);
+    normalG.lineStyle(2, 0x78350f, 0.7);
     normalG.strokeRect(1, 1, TILE_SIZE - 2, TILE_SIZE - 2);
-    // 陣法金邊
-    normalG.lineStyle(1, 0xca8a04, 0.4);
-    normalG.strokeRect(4, 4, TILE_SIZE - 8, TILE_SIZE - 8);
     normalG.generateTexture("tile_normal", TILE_SIZE, TILE_SIZE);
 
     // 2. 密草叢圖案 (幽綠秘草・伏擊專用)
@@ -54,14 +48,27 @@ export class BootScene extends Phaser.Scene {
     bushG.fillRect(0, 0, TILE_SIZE, TILE_SIZE);
     bushG.lineStyle(2, 0x10b981, 1);
     bushG.strokeRect(1, 1, TILE_SIZE - 2, TILE_SIZE - 2);
-    // 仙草葉細節
     bushG.fillStyle(0x34d399, 1);
-    bushG.fillCircle(TILE_SIZE * 0.3, TILE_SIZE * 0.35, 10);
-    bushG.fillCircle(TILE_SIZE * 0.7, TILE_SIZE * 0.35, 10);
-    bushG.fillCircle(TILE_SIZE * 0.5, TILE_SIZE * 0.65, 14);
+    bushG.fillCircle(TILE_SIZE * 0.3, TILE_SIZE * 0.35, 12);
+    bushG.fillCircle(TILE_SIZE * 0.7, TILE_SIZE * 0.35, 12);
+    bushG.fillCircle(TILE_SIZE * 0.5, TILE_SIZE * 0.65, 16);
     bushG.generateTexture("tile_bush", TILE_SIZE, TILE_SIZE);
 
-    // 3. 崎嶇岩石圖案 (魔熔岩石・障礙區)
+    // 3. 深山密林圖案 (濃密綠樹林)
+    const forestG = this.make.graphics({ x: 0, y: 0 });
+    forestG.fillStyle(0x022c22, 0.95);
+    forestG.fillRect(0, 0, TILE_SIZE, TILE_SIZE);
+    forestG.lineStyle(2, 0x059669, 0.8);
+    forestG.strokeRect(1, 1, TILE_SIZE - 2, TILE_SIZE - 2);
+    forestG.fillStyle(0x047857, 1);
+    forestG.fillTriangle(
+      TILE_SIZE * 0.2, TILE_SIZE * 0.85,
+      TILE_SIZE * 0.5, TILE_SIZE * 0.15,
+      TILE_SIZE * 0.8, TILE_SIZE * 0.85
+    );
+    forestG.generateTexture("tile_forest", TILE_SIZE, TILE_SIZE);
+
+    // 4. 崎嶇黑石障礙 (魔石)
     const obsG = this.make.graphics({ x: 0, y: 0 });
     obsG.fillStyle(0x450a0a, 0.95);
     obsG.fillRect(0, 0, TILE_SIZE, TILE_SIZE);
@@ -74,5 +81,17 @@ export class BootScene extends Phaser.Scene {
       TILE_SIZE * 0.8, TILE_SIZE * 0.8
     );
     obsG.generateTexture("tile_obstacle", TILE_SIZE, TILE_SIZE);
+
+    // 5. 底部逃生法陣圖案 (炫彩青藍符文陣)
+    const escapeG = this.make.graphics({ x: 0, y: 0 });
+    escapeG.fillStyle(0x082f49, 0.95);
+    escapeG.fillRect(0, 0, TILE_SIZE, TILE_SIZE);
+    escapeG.lineStyle(3, 0x38bdf8, 1);
+    escapeG.strokeRect(1, 1, TILE_SIZE - 2, TILE_SIZE - 2);
+    escapeG.lineStyle(2, 0x7dd3fc, 0.9);
+    escapeG.strokeCircle(TILE_SIZE / 2, TILE_SIZE / 2, TILE_SIZE * 0.35);
+    escapeG.fillStyle(0x0284c7, 0.8);
+    escapeG.fillCircle(TILE_SIZE / 2, TILE_SIZE / 2, TILE_SIZE * 0.2);
+    escapeG.generateTexture("tile_escape", TILE_SIZE, TILE_SIZE);
   }
 }

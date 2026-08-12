@@ -11,7 +11,7 @@ import { BattleHUD } from "@/components/game/BattleHUD";
 import { CombatLog } from "@/components/game/CombatLog";
 import { BattleResultModal } from "@/components/game/BattleResultModal";
 import { HeroConfig } from "@/types/hero";
-import { BattleUnit } from "@/types/game";
+import { BattleUnit, TacticalActionType } from "@/types/game";
 import { STAGE_1_BANDIT } from "@/game/config/stages";
 import { PROTAGONIST_HERO, SUMMONABLE_HEROES, ENEMY_BANDIT_CHIEF, ENEMY_BANDIT_THUG } from "@/game/config/heroes";
 import { executeBattleStep } from "@/game/systems/CombatSystem";
@@ -21,8 +21,8 @@ import { Home, Save } from "lucide-react";
 const PhaserGame = dynamic(() => import("@/game/PhaserGame"), {
   ssr: false,
   loading: () => (
-    <div className="w-[512px] h-[512px] rounded-xl bg-slate-900 flex items-center justify-center text-amber-400 text-sm font-semibold border border-amber-500/30 animate-pulse">
-      ⚔️ 載入三國修仙戰鬥陣圖中...
+    <div className="w-[288px] h-[720px] rounded-xl bg-zinc-900 flex items-center justify-center text-amber-400 text-sm font-semibold border border-amber-500/30 animate-pulse">
+      ⚔️ 載入 4×10 密林戰場...
     </div>
   ),
 });
@@ -34,6 +34,7 @@ export default function GamePage() {
     units,
     setPhase,
     setUnits,
+    setActiveAction,
     addCombatLog,
     setReward,
     setTacticalOutcome,
@@ -42,7 +43,7 @@ export default function GamePage() {
 
   const [loading, setLoading] = useState(true);
 
-  // 初始化戰鬥單位 (主角 + 召喚名將 + 5 劫匪)
+  // 初始化 4x10 戰鬥單位 (主角 + 召喚名將 + 5 劫匪)
   const initBattleUnits = useCallback(() => {
     const heroToSummon =
       SUMMONABLE_HEROES.find((h) => h.id === selectedHeroId) || SUMMONABLE_HEROES[0];
@@ -107,7 +108,7 @@ export default function GamePage() {
 
     setUnits([...playerUnits, ...enemyUnits]);
     setPhase("DEPLOYMENT");
-    addCombatLog("⚔️ 已進入黑風山遭遇劫匪關卡！請在地圖底部調整布陣。", "info");
+    addCombatLog("⚔️ 已進入黑風山谷 4×10 戰場！可在地圖直接拖拽擺位。", "info");
   }, [selectedHeroId, setUnits, setPhase, addCombatLog]);
 
   // 初始化或載入 SQLite 存檔
@@ -139,7 +140,6 @@ export default function GamePage() {
     setSelectedHeroId(hero.id);
     setStoryStep("BATTLE");
 
-    // 保存存檔至 SQLite
     await fetch("/api/save", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -153,17 +153,34 @@ export default function GamePage() {
 
   const handleStartBattle = () => {
     setPhase("BATTLE_IN_PROGRESS");
-    addCombatLog("🚀 開陣！兩軍正式交鋒！", "info");
+    addCombatLog("🚀 開陣！兩軍在狹長山道正式交鋒！", "info");
     runBattleLoop();
   };
 
   const handleBaitAction = () => {
-    addCombatLog("🏃 主角大喝一聲【以身作餌】：『劫匪休走！有膽追我！』", "skill");
+    addCombatLog("🏃 主角大喝【以身作餌】：『劫匪休走！有膽追我！』", "skill");
     handleStartBattle();
   };
 
   const handleResetDeployment = () => {
     initBattleUnits();
+  };
+
+  const handleExecuteAction = (action: TacticalActionType) => {
+    setActiveAction(action);
+    if (action === "ITEM") {
+      addCombatLog("🧪 服用【紫霄修仙丹】：恢復全隊 50 點生命值！", "skill");
+      setUnits(
+        units.map((u) =>
+          u.faction === "PLAYER" && !u.isDead
+            ? { ...u, currentHp: Math.min(u.maxHp, u.currentHp + 50) }
+            : u
+        )
+      );
+    } else if (action === "FLEE") {
+      addCombatLog("🏃 主角隊伍向底部 (1,9) 逃生法陣撤退！", "info");
+      handleStartBattle();
+    }
   };
 
   const runBattleLoop = () => {
@@ -172,7 +189,6 @@ export default function GamePage() {
       const currentUnits = useBattleStore.getState().units;
       const stepResult = executeBattleStep(currentUnits, turn);
 
-      // 輸出日誌
       stepResult.logs.forEach((log) => addCombatLog(log.text, log.type));
       setUnits(stepResult.updatedUnits);
 
@@ -212,61 +228,60 @@ export default function GamePage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-slate-950 text-amber-400 font-bold text-lg">
-        ⚡ 正在初始化三國修仙大世界...
+      <div className="flex items-center justify-center min-h-screen bg-zinc-950 text-amber-400 font-bold text-lg">
+        ⚡ 正在初始化 4×10 三國修仙戰場...
       </div>
     );
   }
 
   return (
-    <main className="min-h-screen p-4 md:p-6 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black text-slate-100 flex flex-col">
-      {/* 頂部 Navigation Bar */}
-      <header className="flex items-center justify-between mb-4 pb-3 border-b border-slate-800">
+    <main className="min-h-screen p-3 md:p-5 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-zinc-900 via-zinc-950 to-black text-stone-100 flex flex-col">
+      {/* 頂部輕量選單欄 */}
+      <header className="flex items-center justify-between mb-3 pb-2 border-b border-zinc-800">
         <div className="flex items-center gap-3">
           <button
             onClick={() => router.push("/")}
-            className="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 transition border border-slate-700"
+            className="p-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-stone-300 transition border border-zinc-700"
             title="返回主選單"
           >
             <Home className="w-4 h-4" />
           </button>
-          <h1 className="text-xl font-black text-amber-400 tracking-wide">三國修仙 • 第一章</h1>
+          <h1 className="text-lg font-black font-serif-title text-amber-400 tracking-wider">三國修仙 • 第一章黑風山谷</h1>
         </div>
 
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleExportSave}
-            className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs font-semibold text-amber-300 flex items-center gap-1.5 transition"
-          >
-            <Save className="w-3.5 h-3.5" />
-            <span>匯出存檔</span>
-          </button>
-        </div>
+        <button
+          onClick={handleExportSave}
+          className="px-3 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-xs font-semibold text-amber-300 flex items-center gap-1 transition"
+        >
+          <Save className="w-3.5 h-3.5" />
+          <span>匯出存檔</span>
+        </button>
       </header>
 
-      {/* 穿越劇情對話框 */}
+      {/* 穿越劇情對話框 (含右上角跳過按鈕) */}
       {storyStep === "INTRO" && <StoryDialog onComplete={handleStoryComplete} />}
 
       {/* 第一次 4 選 1 召喚 */}
       {storyStep === "SUMMON" && <SummonModal onConfirmSummon={handleConfirmSummon} />}
 
-      {/* 主戰鬥區域 */}
+      {/* 全屏式 4x10 戰術沉浸戰場 */}
       {(storyStep === "BATTLE" || storyStep === "COMPLETED") && (
-        <div className="flex-1 max-w-7xl w-full mx-auto flex flex-col gap-4">
+        <div className="flex-1 max-w-6xl w-full mx-auto flex flex-col gap-3">
           <BattleHUD
             onStartBattle={handleStartBattle}
             onBaitAction={handleBaitAction}
             onResetDeployment={handleResetDeployment}
+            onExecuteAction={handleExecuteAction}
           />
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            {/* Phaser 8x8 格子畫布 */}
-            <div className="lg:col-span-7 flex justify-center">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-start flex-1">
+            {/* 左側：4×10 格子 2D 戰術畫布 (支援拖拽擺位) */}
+            <div className="md:col-span-5 flex justify-center">
               <PhaserGame />
             </div>
 
-            {/* 右側戰鬥日誌 */}
-            <div className="lg:col-span-5 h-full">
+            {/* 右側：修仙戰鬥日誌 */}
+            <div className="md:col-span-7 h-full min-h-[500px]">
               <CombatLog />
             </div>
           </div>

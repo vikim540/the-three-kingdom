@@ -1,6 +1,6 @@
 import { HeroConfig } from "./hero";
 
-export type TerrainType = "NORMAL" | "BUSH" | "OBSTACLE";
+export type TerrainType = "NORMAL" | "BUSH" | "FOREST" | "OBSTACLE" | "ESCAPE";
 
 export interface GridTile {
   x: number;
@@ -9,6 +9,8 @@ export interface GridTile {
 }
 
 export type UnitFactionType = "PLAYER" | "ENEMY";
+
+export type TacticalActionType = "SELECT" | "ATTACK" | "SKILL" | "ITEM" | "FLEE";
 
 export interface BattleUnit {
   instanceId: string;
