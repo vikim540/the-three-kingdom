@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useDevStore } from "@/stores/useDevStore";
 import { RegionType, REGION_COLORS, Point2D } from "@/types/region";
-import { Settings, Plus, Trash2, Copy, Save } from "lucide-react";
+import { Settings, Plus, Trash2, Copy, Save, CheckCircle } from "lucide-react";
 
 export const DevModeEditor: React.FC = () => {
   const {
@@ -22,24 +22,30 @@ export const DevModeEditor: React.FC = () => {
     finishDrawingRegion,
     updateRegionType,
     updateRegionScaleWeight,
+    updatePointPosition,
+    removePointFromRegion,
     deleteRegion,
     duplicateRegion,
     saveRegionsToStorage,
   } = useDevStore();
 
   const [mousePos, setMousePos] = useState<Point2D | null>(null);
+  const [activeDraggingPt, setActiveDraggingPt] = useState<{ regionId: string; pointIdx: number } | null>(null);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // 快捷鍵 Ctrl + S 儲存區域數據
+  // 快捷鍵 Ctrl + S 保存區域數據
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
         e.preventDefault();
         saveRegionsToStorage();
-        alert("💾 [開發模式] 關卡多邊形區域 JSON 已成功保存！");
+        setToastMsg("💾 關卡多邊形區域 JSON 已成功保存 (src/game/config/level_1_polygons.json)！");
+        setTimeout(() => setToastMsg(null), 3000);
       }
       if (e.key === "Escape") {
         clearCurrentPoints();
+        setActiveDraggingPt(null);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -48,6 +54,11 @@ export const DevModeEditor: React.FC = () => {
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!isDevMode || !containerRef.current) return;
+    if (activeDraggingPt) {
+      setActiveDraggingPt(null);
+      saveRegionsToStorage();
+      return;
+    }
 
     const rect = containerRef.current.getBoundingClientRect();
     const xRatio = Number(((e.clientX - rect.left) / rect.width).toFixed(3));
@@ -58,9 +69,22 @@ export const DevModeEditor: React.FC = () => {
     }
   };
 
-  const handleCanvasContextMenu = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isDevMode) return;
-    e.preventDefault();
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const y = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+
+    setMousePos({ x, y });
+
+    // 若正處於頂點拖拽狀態，即時更新頂點座標
+    if (activeDraggingPt) {
+      updatePointPosition(
+        activeDraggingPt.regionId,
+        activeDraggingPt.pointIdx,
+        { x: Number(x.toFixed(3)), y: Number(y.toFixed(3)) }
+      );
+    }
   };
 
   const selectedRegion = regions.find((r) => r.id === selectedRegionId);
@@ -80,19 +104,25 @@ export const DevModeEditor: React.FC = () => {
         <span>開發模式 {isDevMode ? "(ON)" : ""}</span>
       </button>
 
+      {/* ─── Ctrl+S 儲存成功 Toast 提示 ─── */}
+      {toastMsg && (
+        <div className="fixed top-16 right-20 z-50 px-4 py-2 rounded-xl border-2 border-emerald-500 bg-stone-950 text-emerald-300 font-bold text-xs shadow-2xl flex items-center gap-2 animate-bounce">
+          <CheckCircle className="w-4 h-4 text-emerald-400" />
+          <span>{toastMsg}</span>
+        </div>
+      )}
+
       {/* ─── 開發模式多邊形 SVG 編輯層 ─── */}
       {isDevMode && (
         <div
           ref={containerRef}
           onClick={handleCanvasClick}
-          onContextMenu={handleCanvasContextMenu}
-          onMouseMove={(e) => {
-            if (!containerRef.current) return;
-            const rect = containerRef.current.getBoundingClientRect();
-            setMousePos({
-              x: (e.clientX - rect.left) / rect.width,
-              y: (e.clientY - rect.top) / rect.height,
-            });
+          onMouseMove={handleMouseMove}
+          onMouseUp={() => {
+            if (activeDraggingPt) {
+              setActiveDraggingPt(null);
+              saveRegionsToStorage();
+            }
           }}
           className="fixed inset-0 z-40 cursor-crosshair pointer-events-auto select-none"
         >
@@ -109,6 +139,7 @@ export const DevModeEditor: React.FC = () => {
 
               return (
                 <g key={region.id}>
+                  {/* 多邊形填色區域 */}
                   <polygon
                     points={region.points.map((p) => `${p.x * 100}%,${p.y * 100}%`).join(" ")}
                     fill={colorConfig.fill}
@@ -121,7 +152,8 @@ export const DevModeEditor: React.FC = () => {
                     }}
                     className="transition-all hover:opacity-90 cursor-pointer"
                   />
-                  {/* 標籤與頂點 */}
+
+                  {/* 區塊名稱標籤 */}
                   <text
                     x={`${centerX}%`}
                     y={`${centerY}%`}
@@ -133,15 +165,35 @@ export const DevModeEditor: React.FC = () => {
                   >
                     {region.name} ({colorConfig.label})
                   </text>
-                  {region.points.map((pt, idx) => (
-                    <circle
-                      key={idx}
-                      cx={`${pt.x * 100}%`}
-                      cy={`${pt.y * 100}%`}
-                      r={isSelected ? 5 : 3}
-                      fill={isSelected ? "#fbbf24" : colorConfig.stroke}
-                    />
-                  ))}
+
+                  {/* 頂點節點 (支援滑鼠拖拽與右鍵刪除) */}
+                  {region.points.map((pt, idx) => {
+                    const isDraggingThis =
+                      activeDraggingPt?.regionId === region.id && activeDraggingPt?.pointIdx === idx;
+
+                    return (
+                      <circle
+                        key={idx}
+                        cx={`${pt.x * 100}%`}
+                        cy={`${pt.y * 100}%`}
+                        r={isDraggingThis ? 8 : isSelected ? 6 : 4}
+                        fill={isDraggingThis ? "#38bdf8" : isSelected ? "#fbbf24" : colorConfig.stroke}
+                        stroke="#ffffff"
+                        strokeWidth={1.5}
+                        className="cursor-move hover:scale-125 transition-transform"
+                        onMouseDown={(e) => {
+                          e.stopPropagation();
+                          setSelectedRegionId(region.id);
+                          setActiveDraggingPt({ regionId: region.id, pointIdx: idx });
+                        }}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          removePointFromRegion(region.id, idx);
+                        }}
+                      />
+                    );
+                  })}
                 </g>
               );
             })}
@@ -167,13 +219,7 @@ export const DevModeEditor: React.FC = () => {
                   />
                 )}
                 {currentPoints.map((pt, idx) => (
-                  <circle
-                    key={idx}
-                    cx={`${pt.x * 100}%`}
-                    cy={`${pt.y * 100}%`}
-                    r={4}
-                    fill="#38bdf8"
-                  />
+                  <circle key={idx} cx={`${pt.x * 100}%`} cy={`${pt.y * 100}%`} r={5} fill="#38bdf8" />
                 ))}
               </g>
             )}
@@ -182,14 +228,18 @@ export const DevModeEditor: React.FC = () => {
           {/* ─── 左下角繪製與編輯控制面板 ─── */}
           <div
             onClick={(e) => e.stopPropagation()}
-            className="absolute bottom-6 left-6 z-50 w-80 rounded-2xl border-2 border-amber-600/50 p-4 shadow-2xl backdrop-blur-xl bg-stone-950/90 text-stone-200"
+            className="absolute bottom-6 left-6 z-50 w-84 rounded-2xl border-2 border-amber-600/60 p-4 shadow-2xl backdrop-blur-xl bg-stone-950/95 text-stone-200"
           >
             <div className="flex items-center justify-between border-b border-stone-800 pb-2 mb-3">
               <span className="font-bold text-amber-400 text-xs flex items-center gap-1.5">
-                <Settings className="w-4 h-4" /> 關卡區域編輯面板
+                <Settings className="w-4 h-4" /> 關卡多邊形區域編輯器
               </span>
               <button
-                onClick={saveRegionsToStorage}
+                onClick={() => {
+                  saveRegionsToStorage();
+                  setToastMsg("💾 關卡多邊形 JSON 已保存！");
+                  setTimeout(() => setToastMsg(null), 3000);
+                }}
                 className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[11px] font-bold flex items-center gap-1 transition"
                 title="Ctrl + S 快速保存"
               >
@@ -199,24 +249,26 @@ export const DevModeEditor: React.FC = () => {
 
             {/* 繪製新區域控制 */}
             <div className="space-y-2 mb-3">
-              <div className="text-[11px] font-semibold text-stone-400">繪製新區域類型：</div>
+              <div className="text-[11px] font-semibold text-stone-400">選擇新區域類型：</div>
               <div className="grid grid-cols-3 gap-1.5 text-[11px]">
-                {(["ROAD", "AMBUSH", "PLAYER_SPAWN", "ENEMY_SPAWN", "AIR_WALL", "DISABLED"] as RegionType[]).map((type) => (
-                  <button
-                    key={type}
-                    onClick={() => {
-                      setDrawingType(type);
-                      setIsDrawing(true);
-                    }}
-                    className={`p-1.5 rounded-lg border text-center font-bold transition ${
-                      drawingType === type && isDrawing
-                        ? "border-amber-400 bg-amber-500/30 text-white"
-                        : "border-stone-800 bg-stone-900 text-stone-300 hover:border-stone-700"
-                    }`}
-                  >
-                    {REGION_COLORS[type].label}
-                  </button>
-                ))}
+                {(["ROAD", "AMBUSH", "PLAYER_SPAWN", "ENEMY_SPAWN", "AIR_WALL", "DISABLED"] as RegionType[]).map(
+                  (type) => (
+                    <button
+                      key={type}
+                      onClick={() => {
+                        setDrawingType(type);
+                        setIsDrawing(true);
+                      }}
+                      className={`p-1.5 rounded-lg border text-center font-bold transition ${
+                        drawingType === type && isDrawing
+                          ? "border-amber-400 bg-amber-500/30 text-white"
+                          : "border-stone-800 bg-stone-900 text-stone-300 hover:border-stone-700"
+                      }`}
+                    >
+                      {REGION_COLORS[type].label}
+                    </button>
+                  )
+                )}
               </div>
 
               {isDrawing ? (
@@ -240,7 +292,7 @@ export const DevModeEditor: React.FC = () => {
                   onClick={() => setIsDrawing(true)}
                   className="w-full py-1.5 rounded-lg bg-amber-600/80 hover:bg-amber-600 text-white font-bold text-xs flex items-center justify-center gap-1 mt-1"
                 >
-                  <Plus className="w-3.5 h-3.5" /> 左鍵點擊畫布繪製多邊形
+                  <Plus className="w-3.5 h-3.5" /> 左鍵點擊畫布開始繪製
                 </button>
               )}
             </div>
@@ -273,7 +325,7 @@ export const DevModeEditor: React.FC = () => {
                   <select
                     value={selectedRegion.type}
                     onChange={(e) => updateRegionType(selectedRegion.id, e.target.value as RegionType)}
-                    className="flex-1 bg-stone-900 border border-stone-700 rounded p-1 text-amber-200"
+                    className="flex-1 bg-stone-900 border border-stone-700 rounded p-1 text-amber-200 font-bold"
                   >
                     {(["ROAD", "AMBUSH", "PLAYER_SPAWN", "ENEMY_SPAWN", "AIR_WALL", "DISABLED"] as RegionType[]).map((t) => (
                       <option key={t} value={t}>
@@ -285,8 +337,8 @@ export const DevModeEditor: React.FC = () => {
 
                 <div>
                   <div className="flex justify-between text-stone-400 mb-1">
-                    <span>高度/透視縮放權重：</span>
-                    <span className="text-amber-300 font-mono">
+                    <span>透視縮放權重：</span>
+                    <span className="text-amber-300 font-mono font-bold">
                       {selectedRegion.scaleWeight || 0.8}x
                     </span>
                   </div>
@@ -300,10 +352,14 @@ export const DevModeEditor: React.FC = () => {
                     className="w-full accent-amber-500"
                   />
                 </div>
+
+                <div className="text-[10px] text-stone-500 pt-1">
+                  💡 提示：按住頂點圓圈可自由拖拽；右鍵頂點可刪除該頂點。
+                </div>
               </div>
             ) : (
               <div className="border-t border-stone-800 pt-2 text-[11px] text-stone-500 text-center">
-                點擊任意多邊形右鍵/左鍵以編輯屬性
+                點擊任意多邊形可進行屬性與頂點編輯
               </div>
             )}
           </div>

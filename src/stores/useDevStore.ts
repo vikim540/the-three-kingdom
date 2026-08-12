@@ -9,6 +9,7 @@ interface DevState {
   drawingType: RegionType;
   isDrawing: boolean;
   currentPoints: Point2D[];
+  draggedPointIndex: { regionId: string; pointIdx: number } | null;
 
   toggleDevMode: () => void;
   setDevMode: (active: boolean) => void;
@@ -21,6 +22,9 @@ interface DevState {
   finishDrawingRegion: (name?: string) => void;
   updateRegionType: (id: string, type: RegionType) => void;
   updateRegionScaleWeight: (id: string, weight: number) => void;
+  updatePointPosition: (regionId: string, pointIdx: number, point: Point2D) => void;
+  removePointFromRegion: (regionId: string, pointIdx: number) => void;
+  addPointToRegion: (regionId: string, point: Point2D) => void;
   deleteRegion: (id: string) => void;
   duplicateRegion: (id: string) => void;
   saveRegionsToStorage: () => void;
@@ -38,6 +42,7 @@ export const useDevStore = create<DevState>((set, get) => ({
   drawingType: "ROAD",
   isDrawing: false,
   currentPoints: [],
+  draggedPointIndex: null,
 
   toggleDevMode: () => set((state) => ({ isDevMode: !state.isDevMode })),
   setDevMode: (active) => set({ isDevMode: active }),
@@ -83,6 +88,36 @@ export const useDevStore = create<DevState>((set, get) => ({
     get().saveRegionsToStorage();
   },
 
+  updatePointPosition: (regionId, pointIdx, point) => {
+    const nextRegions = get().regions.map((r) => {
+      if (r.id !== regionId) return r;
+      const pts = [...r.points];
+      pts[pointIdx] = point;
+      return { ...r, points: pts };
+    });
+    set({ regions: nextRegions });
+  },
+
+  removePointFromRegion: (regionId, pointIdx) => {
+    const nextRegions = get().regions.map((r) => {
+      if (r.id !== regionId) return r;
+      if (r.points.length <= 3) return r; // 保持最少 3 頂點
+      const pts = r.points.filter((_, idx) => idx !== pointIdx);
+      return { ...r, points: pts };
+    });
+    set({ regions: nextRegions });
+    get().saveRegionsToStorage();
+  },
+
+  addPointToRegion: (regionId, point) => {
+    const nextRegions = get().regions.map((r) => {
+      if (r.id !== regionId) return r;
+      return { ...r, points: [...r.points, point] };
+    });
+    set({ regions: nextRegions });
+    get().saveRegionsToStorage();
+  },
+
   deleteRegion: (id) => {
     const nextRegions = get().regions.filter((r) => r.id !== id);
     set({ regions: nextRegions, selectedRegionId: null });
@@ -106,7 +141,6 @@ export const useDevStore = create<DevState>((set, get) => ({
   saveRegionsToStorage: () => {
     if (typeof window !== "undefined") {
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(get().regions));
-      // 同步發送 API JSON 備份
       fetch("/api/level/regions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

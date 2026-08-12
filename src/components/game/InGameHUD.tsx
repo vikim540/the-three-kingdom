@@ -225,7 +225,7 @@ export const InGameHUD: React.FC<InGameHUDProps> = ({
         </div>
 
         <button
-          onClick={toggleB}
+          onClick={() => toggleB()}
           className="p-2.5 rounded-xl border-2 border-amber-500/60 bg-stone-900/90 hover:bg-stone-800 text-amber-300 font-bold text-xs flex items-center gap-1 transition shadow-lg"
           title="按 B 鍵開啟主角個人背包"
         >
