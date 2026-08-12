@@ -15,7 +15,12 @@
 - 所有設計、架構說明與決策記錄統一放在 `/docs` 目錄（如 `/docs/design/`, `/docs/decisions/`）。
 - 所有遊戲 2D 美術圖案資材統一放置於 `/public/assets/` 目錄（WebP 格式）。
 
-## 三、Git 提交規範 (Git Commit Standards)
+## 三、生成資源與存儲路徑 (Storage & Artifact Directory)
+- **硬碟空間保護**：本專案所有生成的備份檔案、圖片資材、日誌與臨時產出，**統一指定放置於 D 盤目錄**：
+  `D:\AI\antigravity\brain\e4b02c72-40ea-4495-98c7-9012a6cf719d\`
+- 嚴禁在 C 盤留存大型編譯日誌或生成圖檔。
+
+## 四、Git 提交規範 (Git Commit Standards)
 強制採用 Emoji + Conventional Commits：
 - ✨ `feat:` 新功能
 - 🐛 `fix:` 修復 Bug
@@ -28,7 +33,7 @@
 
 目標分支：`antigravity`
 
-## 四、遊戲 MVP 規則 (Gameplay Rules)
+## 五、遊戲 MVP 規則 (Gameplay Rules)
 - 地圖尺寸：8×8
 - 地形：普通平地、密草叢（伏擊）、崎嶇岩石（障礙）
 - 雙分歧通關：
