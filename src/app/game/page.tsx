@@ -88,8 +88,8 @@ export default function GamePage() {
   const initBattleUnits = useCallback(() => {
     const heroId = selectedHeroId || SUMMONABLE_HEROES[0].id;
     const playerUnits = [
-      buildUnit("u_protagonist", "hero_protagonist", "PLAYER", 0.5, 0.85),
-      buildUnit(`u_${heroId}`, heroId, "PLAYER", 0.35, 0.82),
+      buildUnit("u_protagonist", "hero_protagonist", "PLAYER", -1, -1),
+      buildUnit(`u_${heroId}`, heroId, "PLAYER", -1, -1),
     ];
     const enemyUnits = STAGE_1_BANDIT.enemies.map((e, i) =>
       buildUnit(`enemy_${i}`, e.heroId, "ENEMY", 0.38 + i * 0.06, 0.22 + (i % 2) * 0.05)
@@ -144,7 +144,10 @@ export default function GamePage() {
     );
   };
 
+  const [isDialogueActive, setIsDialogueActive] = useState(true);
+
   const handleBanditChoice = (choiceType: "ATTACK" | "AMBUSH" | "GUARD") => {
+    setIsDialogueActive(false);
     if (choiceType === "AMBUSH") {
       // 自動將黃忠部署至左側伏擊區 (0.12, 0.72)
       setUnits(
@@ -258,7 +261,10 @@ export default function GamePage() {
 
       {/* 4. 山賊攔路對白對策 Modal (布陣階段觸發) */}
       {(storyStep === "BATTLE" || storyStep === "COMPLETED") && (
-        <BanditDialogueModal onConfirmChoice={handleBanditChoice} />
+        <BanditDialogueModal
+          onConfirmChoice={handleBanditChoice}
+          onDismiss={() => setIsDialogueActive(false)}
+        />
       )}
 
       {/* 5. 全螢幕戰鬥 In-Game HUD 覆蓋層 */}
@@ -267,16 +273,19 @@ export default function GamePage() {
           <InGameHUD
             onStartBattle={handleStartBattle}
             onBaitAction={handleBaitAction}
-            onResetDeployment={initBattleUnits}
+            onResetDeployment={() => {
+              setIsDialogueActive(true);
+              initBattleUnits();
+            }}
             onReturnHome={() => router.push("/")}
             onExportSave={handleExportSave}
           />
 
-          {/* 6. 底部 GSAP 扇形展開手牌 (布陣階段，獨占底部區域不與按鈕重合) */}
-          <FanOutHandCards onPlaceUnit={handlePlaceUnit} />
+          {/* 6. 底部 GSAP 扇形展開手牌 (對白關閉後乾淨展示，獨占底部區域) */}
+          {!isDialogueActive && <FanOutHandCards onPlaceUnit={handlePlaceUnit} />}
 
-          {/* 7. 選中 2D 角色彈出指令輪盤 */}
-          {selectedUnitId && selectedUnit && selectedUnit.faction === "PLAYER" && (
+          {/* 7. 兩軍交鋒階段選中 2D 角色才彈出指令輪盤 (布陣階段不混淆彈出) */}
+          {useBattleStore.getState().phase === "BATTLE_IN_PROGRESS" && selectedUnitId && selectedUnit && selectedUnit.faction === "PLAYER" && (
             <RadialCommandMenu
               x={selectedUnit.x <= 1 ? selectedUnit.x * window.innerWidth : selectedUnit.x}
               y={selectedUnit.y <= 1 ? selectedUnit.y * window.innerHeight : selectedUnit.y}

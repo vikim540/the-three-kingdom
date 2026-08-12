@@ -17,8 +17,8 @@ export const FanOutHandCards: React.FC<FanOutHandCardsProps> = ({ onPlaceUnit })
   const containerRef = useRef<HTMLDivElement>(null);
   const cardsRef = useRef<(HTMLDivElement | null)[]>([]);
 
-  // 尚未放置在場景上的手牌單位 (PLAYER 陣營)
-  const unplacedUnits = units.filter((u) => u.faction === "PLAYER" && !u.isDead);
+  // 尚未放置在場景上的手牌單位 (PLAYER 陣營且 x < 0 或 y < 0)
+  const unplacedUnits = units.filter((u) => u.faction === "PLAYER" && !u.isDead && (u.x < 0 || u.y < 0));
 
   const [draggingUnitId, setDraggingUnitId] = useState<string | null>(null);
   const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
@@ -113,13 +113,13 @@ export const FanOutHandCards: React.FC<FanOutHandCardsProps> = ({ onPlaceUnit })
     const normX = dragPos.x / window.innerWidth;
     const normY = dragPos.y / window.innerHeight;
 
-    // 檢查放置目標是否在合法 PLAYER_SPAWN 或 AMBUSH 多邊形區域內
+    // 檢查放置目標是否在非空氣牆區域或下半部戰場內
     const validRegion = regions.find((r) =>
-      (r.type === "PLAYER_SPAWN" || r.type === "AMBUSH") && isPointInPolygon({ x: normX, y: normY }, r.points)
+      r.type !== "AIR_WALL" && isPointInPolygon({ x: normX, y: normY }, r.points)
     );
 
-    if (validRegion) {
-      onPlaceUnit(draggingUnitId, normX, normY);
+    if (validRegion || normY >= 0.3) {
+      onPlaceUnit(draggingUnitId, normX, Math.max(0.25, Math.min(0.92, normY)));
     }
 
     setDraggingUnitId(null);

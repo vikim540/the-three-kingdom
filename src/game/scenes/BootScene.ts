@@ -10,12 +10,6 @@ export class BootScene extends Phaser.Scene {
     this.load.image("battle_bg", "/assets/terrain/battle_bg.webp");
     this.load.image("fog_layer", "/assets/terrain/fog_layer.webp");
 
-    // 載入 2D 單個人物透明底戰鬥人物素材 (完全無矩形背景)
-    this.load.svg("hero_protagonist_sprite", "/assets/heroes/protagonist_sprite.svg");
-    this.load.svg("hero_huang_zhong_sprite", "/assets/heroes/huang_zhong_sprite.svg");
-    this.load.svg("enemy_bandit_chief_sprite", "/assets/heroes/bandit_chief_sprite.svg");
-    this.load.svg("enemy_bandit_thug_sprite", "/assets/heroes/bandit_thug_sprite.svg");
-
     // 相容載入名將頭像
     this.load.image("hero_protagonist", "/assets/heroes/protagonist.webp");
     this.load.image("hero_huang_zhong", "/assets/heroes/huang_zhong.webp");

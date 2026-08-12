@@ -7,16 +7,22 @@ import { Swords, ShieldAlert, Crosshair, X } from "lucide-react";
 
 interface BanditDialogueModalProps {
   onConfirmChoice: (choiceType: "ATTACK" | "AMBUSH" | "GUARD") => void;
+  onDismiss?: () => void;
 }
 
-export const BanditDialogueModal: React.FC<BanditDialogueModalProps> = ({ onConfirmChoice }) => {
+export const BanditDialogueModal: React.FC<BanditDialogueModalProps> = ({ onConfirmChoice, onDismiss }) => {
   const { phase, addCombatLog } = useBattleStore();
   const [dismissed, setDismissed] = useState(false);
 
   if (phase !== "DEPLOYMENT" || dismissed) return null;
 
-  const handleSelect = (choiceType: "ATTACK" | "AMBUSH" | "GUARD") => {
+  const handleDismiss = () => {
     setDismissed(true);
+    if (onDismiss) onDismiss();
+  };
+
+  const handleSelect = (choiceType: "ATTACK" | "AMBUSH" | "GUARD") => {
+    handleDismiss();
     if (choiceType === "ATTACK") {
       addCombatLog("⚔️ 主角大喝：『放肆山賊！看吾九天雷霆斬你！』全隊士氣大振！", "skill");
     } else if (choiceType === "AMBUSH") {
@@ -33,7 +39,7 @@ export const BanditDialogueModal: React.FC<BanditDialogueModalProps> = ({ onConf
 
         {/* 關閉按鈕 */}
         <button
-          onClick={() => setDismissed(true)}
+          onClick={handleDismiss}
           className="absolute top-3 right-3 p-1 text-stone-500 hover:text-stone-300 transition"
         >
           <X className="w-5 h-5" />
