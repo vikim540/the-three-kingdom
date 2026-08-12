@@ -29,6 +29,7 @@ interface DevState {
   deleteRegion: (id: string) => void;
   duplicateRegion: (id: string) => void;
   saveRegionsToStorage: () => void;
+  loadRegionsFromStorage: () => void;
   resetRegionsToDefault: () => void;
 }
 
@@ -36,9 +37,7 @@ const LOCAL_STORAGE_KEY = "three_kingdoms_level_regions_v1";
 
 export const useDevStore = create<DevState>((set, get) => ({
   isDevMode: false,
-  regions: (typeof window !== "undefined" && localStorage.getItem(LOCAL_STORAGE_KEY))
-    ? JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY)!)
-    : (initialRegions as PolygonRegion[]),
+  regions: (initialRegions as PolygonRegion[]),
   selectedRegionId: null,
   drawingType: "ROAD",
   isDrawing: false,
@@ -151,6 +150,19 @@ export const useDevStore = create<DevState>((set, get) => ({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(get().regions),
       }).catch(console.error);
+    }
+  },
+
+  loadRegionsFromStorage: () => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (saved) {
+        try {
+          set({ regions: JSON.parse(saved) });
+        } catch (e) {
+          console.error(e);
+        }
+      }
     }
   },
 

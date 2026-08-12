@@ -28,6 +28,7 @@ export const DevModeEditor: React.FC = () => {
     deleteRegion,
     duplicateRegion,
     saveRegionsToStorage,
+    loadRegionsFromStorage,
   } = useDevStore();
 
   const [mousePos, setMousePos] = useState<Point2D | null>(null);
@@ -35,6 +36,10 @@ export const DevModeEditor: React.FC = () => {
   const [activeDraggingRegion, setActiveDraggingRegion] = useState<{ regionId: string; startPos: Point2D } | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    loadRegionsFromStorage();
+  }, [loadRegionsFromStorage]);
 
   // 快捷鍵 Ctrl + S 保存區域數據
   useEffect(() => {

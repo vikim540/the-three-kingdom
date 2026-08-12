@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 280" width="200" height="280">
+  <defs>
+    <filter id="glow-green" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="6" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+    <linearGradient id="green-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#34d399" />
+      <stop offset="100%" stop-color="#064e3b" />
+    </linearGradient>
+    <linearGradient id="bow-glow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fbbf24" />
+      <stop offset="100%" stop-color="#d97706" />
+    </linearGradient>
+  </defs>
+
+  <!-- 腳下草叢與伏擊氣環 (透明底) -->
+  <ellipse cx="100" cy="250" rx="75" ry="22" fill="rgba(16,185,129,0.3)" stroke="#34d399" stroke-width="2.5" filter="url(#glow-green)" />
+  <path d="M 40 240 Q 55 210 70 245 M 130 245 Q 145 210 160 240" stroke="#10b981" stroke-width="3" fill="none" />
+
+  <!-- 蜀仙綠袍與身軀 -->
+  <path d="M 55 135 L 35 230 L 100 245 L 165 230 L 145 135 Z" fill="url(#green-grad)" stroke="#6ee7b7" stroke-width="2" />
+  <path d="M 68 75 Q 100 60 132 75 L 145 145 L 55 145 Z" fill="#064e3b" stroke="#10b981" stroke-width="2" />
+
+  <!-- 神箭老將金弓 (張弓立姿) -->
+  <path d="M 30 50 Q 5 140 30 230" fill="none" stroke="url(#bow-glow)" stroke-width="6" stroke-linecap="round" filter="url(#glow-green)" />
+  <line x1="30" y1="50" x2="30" y2="230" stroke="#ffffff" stroke-width="1.5" stroke-dasharray="8,3" />
+
+  <!-- 穿雲仙箭 -->
+  <line x1="20" y1="140" x2="175" y2="140" stroke="#f59e0b" stroke-width="3.5" filter="url(#glow-green)" />
+  <polygon points="175,140 160,133 160,147" fill="#fbbf24" stroke="#ffffff" stroke-width="1" />
+
+  <!-- 老仙將老當益壯白鬚與頭盔 -->
+  <circle cx="100" cy="55" r="23" fill="#1e293b" stroke="#fbbf24" stroke-width="2.5" />
+  <!-- 白鬚 -->
+  <path d="M 82 62 Q 100 95 118 62 Z" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5" />
+  <!-- 仙將頭盔 -->
+  <path d="M 78 48 Q 100 20 122 48" fill="#d97706" stroke="#fbbf24" stroke-width="2" />
+  <circle cx="100" cy="22" r="5" fill="#ef4444" />
+</svg>

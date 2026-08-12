@@ -23,7 +23,7 @@ export class BattleScene extends Phaser.Scene {
     // 1. 全螢幕山谷背景圖
     this.addBackground();
 
-    // 2. 飄動環境雲霧層 (動態雨霧飄動感覺)
+    // 2. 氣若柔絲 局部雨霧飄動層
     this.addDriftingFogLayer();
 
     // 3. 多邊形區域繪製圖層 (僅在開發者模式下顯示)
@@ -48,10 +48,10 @@ export class BattleScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number) {
-    // 動態山林雨霧飄動動畫 (橫向與微縱向飄動)
+    // 動態山林雨霧飄動動畫 (氣若柔絲 緩慢漂移)
     if (this.fogTileSprite) {
-      this.fogTileSprite.tilePositionX += (delta * 0.02);
-      this.fogTileSprite.tilePositionY += (delta * 0.005);
+      this.fogTileSprite.tilePositionX += delta * 0.015;
+      this.fogTileSprite.tilePositionY += delta * 0.004;
     }
   }
 
@@ -65,22 +65,22 @@ export class BattleScene extends Phaser.Scene {
   }
 
   /**
-   * 添加動態山林雲霧層
+   * 添加氣若柔絲 局部飄動雨霧
    */
   private addDriftingFogLayer() {
     const w = this.scale.width;
     const h = this.scale.height;
 
     if (this.textures.exists("fog_layer")) {
-      this.fogTileSprite = this.add.tileSprite(w / 2, h / 2, w, h, "fog_layer");
-      this.fogTileSprite.setAlpha(0.35);
+      this.fogTileSprite = this.add.tileSprite(w / 2, h * 0.35, w, h * 0.5, "fog_layer");
+      this.fogTileSprite.setAlpha(0.28);
       this.fogTileSprite.setBlendMode(Phaser.BlendModes.SCREEN);
 
-      // 雲霧透明度呼吸動態
+      // 間歇出現 氣若柔絲 呼吸動效
       this.tweens.add({
         targets: this.fogTileSprite,
-        alpha: 0.52,
-        duration: 4000,
+        alpha: 0.42,
+        duration: 4500,
         yoyo: true,
         repeat: -1,
         ease: "Sine.easeInOut",
@@ -126,7 +126,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   /**
-   * 建立與更新「2D 描邊透明角色」單位 Container (徹底移除矩形卡牌)
+   * 建立與更新「2D 透明底人物」單位 Container (徹底移除所有矩形/卡牌邊框)
    */
   private updateUnitsVisual(units: BattleUnit[]) {
     const sw = this.scale.width;
@@ -146,7 +146,7 @@ export class BattleScene extends Phaser.Scene {
         container = this.add.container(px, py) as UnitSpriteContainer;
         container.unitInstanceId = unit.instanceId;
 
-        // 構建 2D 描邊角色 UI
+        // 構建 2D 單個人物透明底角色
         this.build2DCharacterSprite(container, unit);
         this.unitContainers.set(unit.instanceId, container);
       }
@@ -189,14 +189,14 @@ export class BattleScene extends Phaser.Scene {
   }
 
   /**
-   * 創建 2D 描邊光圈透明底角色 (無卡牌框)
+   * 創建單個人物 2D 透明底描邊角色 (無卡牌、無背景框)
    */
   private build2DCharacterSprite(container: UnitSpriteContainer, unit: BattleUnit) {
     container.removeAll(true);
 
     const isPlayer = unit.faction === "PLAYER";
     const quality = unit.heroConfig.quality || "靈";
-    const radius = 34;
+    const radius = 35;
 
     const qualityGlowColors: Record<string, number> = {
       仙: 0xf59e0b,
@@ -207,48 +207,35 @@ export class BattleScene extends Phaser.Scene {
     };
     const borderColor = isPlayer ? (qualityGlowColors[quality] || 0x10b981) : 0xef4444;
 
-    // 1. 2D 腳下發光橢圓底盤
+    // 1. 2D 腳下修仙/山賊描邊橢圓光環 (透明底)
     const baseDisk = this.add.graphics();
-    baseDisk.fillStyle(borderColor, 0.28);
-    baseDisk.fillEllipse(0, radius - 4, radius * 1.5, radius * 0.65);
-    baseDisk.lineStyle(2, borderColor, 0.95);
-    baseDisk.strokeEllipse(0, radius - 4, radius * 1.5, radius * 0.65);
+    baseDisk.fillStyle(borderColor, 0.3);
+    baseDisk.fillEllipse(0, 35, radius * 1.6, radius * 0.65);
+    baseDisk.lineStyle(2.5, borderColor, 1);
+    baseDisk.strokeEllipse(0, 35, radius * 1.6, radius * 0.65);
 
-    // 2. 2D 描邊角色頭像/立繪 Sprite
-    let texKey = "hero_protagonist";
+    // 2. 2D 單個人物透明底 Sprite 素材 (無卡牌、無頭像框)
+    let spriteKey = "hero_protagonist_sprite";
     const id = unit.heroConfig.id;
-    if (id === "hero_huang_zhong") texKey = "hero_huang_zhong";
-    else if (id === "hero_xiahou_dun") texKey = "hero_xiahou_dun";
-    else if (id === "hero_zhao_yun") texKey = "hero_zhao_yun";
-    else if (id === "hero_guo_jia") texKey = "hero_guo_jia";
-    else if (id === "enemy_bandit_chief") texKey = "enemy_bandit_chief";
-    else if (id === "enemy_bandit_thug") texKey = "enemy_bandit_thug";
+    if (id === "hero_huang_zhong") spriteKey = "hero_huang_zhong_sprite";
+    else if (id === "enemy_bandit_chief") spriteKey = "enemy_bandit_chief_sprite";
+    else if (id === "enemy_bandit_thug") spriteKey = "enemy_bandit_thug_sprite";
 
-    // 2D 圓形描邊金/紅圈頭像 Sprite
-    const charCircleBg = this.add.circle(0, -6, radius, 0x09090b, 0.95);
-    charCircleBg.setStrokeStyle(2.5, borderColor, 1);
-
-    const charSprite = this.add.image(0, -6, texKey);
-    charSprite.setDisplaySize(radius * 1.85, radius * 1.85);
-
-    // 圓形裁切遮罩
-    const maskG = this.add.graphics();
-    maskG.fillStyle(0xffffff);
-    maskG.fillCircle(container.x, container.y - 6, radius - 2);
-    charSprite.setMask(new Phaser.Display.Masks.GeometryMask(this, maskG));
+    const charSprite = this.add.image(0, -30, spriteKey);
+    charSprite.setDisplaySize(100, 140);
 
     // 3. 頂部血條
     const hpBarW = 64;
-    const hpBg = this.add.rectangle(0, -radius - 14, hpBarW, 6, 0x000000, 0.85);
+    const hpBg = this.add.rectangle(0, -95, hpBarW, 6, 0x000000, 0.85);
     const hpFill = this.add.rectangle(
-      -hpBarW / 2, -radius - 14,
+      -hpBarW / 2, -95,
       hpBarW * (unit.currentHp / unit.maxHp), 5,
       isPlayer ? 0x22c55e : 0xef4444, 1
     ).setOrigin(0, 0.5);
     hpFill.setName("unitHpFill");
 
     // 4. 腳下名字與職位標籤
-    const nameText = this.add.text(0, radius + 12, unit.heroConfig.name, {
+    const nameText = this.add.text(0, 48, unit.heroConfig.name, {
       fontSize: "11px",
       color: isPlayer ? "#fef08a" : "#fca5a5",
       fontStyle: "bold",
@@ -260,7 +247,7 @@ export class BattleScene extends Phaser.Scene {
     const isAmbush = unit.statusEffects.includes("AMBUSH");
     let ambushTag: Phaser.GameObjects.Text | null = null;
     if (isAmbush) {
-      ambushTag = this.add.text(0, -radius - 26, "🌿 伏擊中", {
+      ambushTag = this.add.text(0, -108, "🌿 伏擊中", {
         fontSize: "10px",
         color: "#6ee7b7",
         stroke: "#064e3b",
@@ -268,33 +255,34 @@ export class BattleScene extends Phaser.Scene {
       }).setOrigin(0.5);
     }
 
-    // 組合 Container
-    const children = [baseDisk, charCircleBg, charSprite, hpBg, hpFill, nameText];
+    // 組合 Container 內容物
+    const children = [baseDisk, charSprite, hpBg, hpFill, nameText];
     if (ambushTag) children.push(ambushTag);
     container.add(children);
 
     // 呼吸浮動 Tween 動畫 (自然微上下飄動)
     this.tweens.add({
       targets: charSprite,
-      y: -9,
-      duration: 1500,
+      y: -35,
+      duration: 1600,
       yoyo: true,
       repeat: -1,
       ease: "Sine.easeInOut",
     });
 
     container.setInteractive(
-      new Phaser.Geom.Circle(0, -6, radius),
-      Phaser.Geom.Circle.Contains
+      new Phaser.Geom.Rectangle(-45, -95, 90, 140),
+      Phaser.Geom.Rectangle.Contains
     );
 
+    // 點擊場面 2D 角色觸發選擇
     container.on("pointerdown", () => {
       if (unit.faction === "PLAYER") {
         useBattleStore.getState().setSelectedUnitId(unit.instanceId);
       }
     });
 
-    // 懸停放大
+    // 懸停動態效果
     container.on("pointerover", () => {
       this.tweens.add({
         targets: container,
