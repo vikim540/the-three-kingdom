@@ -108,15 +108,14 @@ export class BattleScene extends Phaser.Scene {
         // 建立新 Token Container
         container = this.add.container(targetX, targetY);
 
-        // 光圖案/外框色環
         const isPlayer = unit.faction === "PLAYER";
         const ringColor = isPlayer ? 0x3b82f6 : 0xef4444;
 
-        // 背景底圈
-        const bgCircle = this.add.circle(0, 0, 25, 0x0f172a, 0.9);
+        // 背景底圈與外框
+        const bgCircle = this.add.circle(0, 0, 24, 0x0f172a, 0.95);
         bgCircle.setStrokeStyle(3, ringColor, 1);
 
-        // 載入 2D 美術頭像圖
+        // 載入 2D 頭像圖
         let textureKey = "hero_protagonist";
         if (unit.heroConfig.id === "hero_huang_zhong") textureKey = "hero_huang_zhong";
         if (unit.heroConfig.id === "hero_xiahou_dun") textureKey = "hero_xiahou_dun";
@@ -126,20 +125,13 @@ export class BattleScene extends Phaser.Scene {
         if (unit.heroConfig.id === "enemy_bandit_thug") textureKey = "enemy_bandit_thug";
 
         const portraitImg = this.add.image(0, 0, textureKey);
-        portraitImg.setDisplaySize(44, 44);
-
-        // 用形狀做圓形裁切 Mask
-        const shapeMask = this.make.graphics({});
-        shapeMask.fillStyle(0xffffff);
-        shapeMask.fillCircle(targetX, targetY, 22);
-        const mask = shapeMask.createGeometryMask();
-        portraitImg.setMask(mask);
+        portraitImg.setDisplaySize(42, 42);
 
         // 血條圖案
-        const hpBg = this.add.rectangle(0, -28, 44, 6, 0x000000, 0.8);
+        const hpBg = this.add.rectangle(0, -27, 44, 6, 0x000000, 0.85);
         const hpFill = this.add.rectangle(
           0,
-          -28,
+          -27,
           42 * (unit.currentHp / unit.maxHp),
           4,
           isPlayer ? 0x22c55e : 0xef4444,
@@ -159,7 +151,7 @@ export class BattleScene extends Phaser.Scene {
 
         container.add([bgCircle, portraitImg, hpBg, hpFill, nameText]);
         container.setInteractive(
-          new Phaser.Geom.Circle(0, 0, 26),
+          new Phaser.Geom.Circle(0, 0, 24),
           Phaser.Geom.Circle.Contains
         );
 

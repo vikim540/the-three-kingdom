@@ -7,7 +7,7 @@ export class BootScene extends Phaser.Scene {
   }
 
   preload() {
-    // 載入 2D 高清背景與人物美術圖案
+    // 預載入 2D 高清背景與人物美術圖案
     this.load.image("battle_bg", "/assets/terrain/battle_bg.webp");
     this.load.image("hero_protagonist", "/assets/heroes/protagonist.webp");
     this.load.image("hero_huang_zhong", "/assets/heroes/huang_zhong.webp");
@@ -16,12 +16,11 @@ export class BootScene extends Phaser.Scene {
     this.load.image("hero_guo_jia", "/assets/heroes/guo_jia.webp");
     this.load.image("enemy_bandit_chief", "/assets/heroes/bandit_chief.webp");
     this.load.image("enemy_bandit_thug", "/assets/heroes/bandit_thug.webp");
-
-    // 建立向量地形格子圖案
-    this.createTextureGraphics();
   }
 
   create() {
+    // 資材載入完成後建立動態圖案
+    this.createTextureGraphics();
     this.scene.start("BattleScene");
   }
 
@@ -40,7 +39,6 @@ export class BootScene extends Phaser.Scene {
     bushG.fillRect(0, 0, TILE_SIZE, TILE_SIZE);
     bushG.lineStyle(2, 0x10b981, 0.9);
     bushG.strokeRect(0, 0, TILE_SIZE, TILE_SIZE);
-    // 草葉細節
     bushG.fillStyle(0x059669, 0.9);
     bushG.fillCircle(TILE_SIZE * 0.3, TILE_SIZE * 0.4, 10);
     bushG.fillCircle(TILE_SIZE * 0.7, TILE_SIZE * 0.4, 10);

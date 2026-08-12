@@ -11,7 +11,8 @@ export const PhaserGameContent: React.FC = () => {
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (!containerRef.current || gameRef.current) return;
+    const container = containerRef.current;
+    if (!container || gameRef.current) return;
 
     const canvasWidth = MAP_SIZE * TILE_SIZE; // 512px
     const canvasHeight = MAP_SIZE * TILE_SIZE; // 512px
@@ -20,7 +21,7 @@ export const PhaserGameContent: React.FC = () => {
       type: Phaser.AUTO,
       width: canvasWidth,
       height: canvasHeight,
-      parent: containerRef.current,
+      parent: container,
       backgroundColor: "#0d0f17",
       scene: [BootScene, BattleScene],
       physics: {
@@ -35,8 +36,13 @@ export const PhaserGameContent: React.FC = () => {
     gameRef.current = new Phaser.Game(config);
 
     return () => {
-      gameRef.current?.destroy(true);
-      gameRef.current = null;
+      if (gameRef.current) {
+        gameRef.current.destroy(true);
+        gameRef.current = null;
+      }
+      if (container) {
+        container.innerHTML = "";
+      }
     };
   }, []);
 
