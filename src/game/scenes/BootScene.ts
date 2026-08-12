@@ -10,7 +10,13 @@ export class BootScene extends Phaser.Scene {
     this.load.image("battle_bg", "/assets/terrain/battle_bg.webp");
     this.load.image("fog_layer", "/assets/terrain/fog_layer.webp");
 
-    // 相容載入名將頭像
+    // 載入 2D 高清 Live2D 動態戰鬥角色圖案 (無任何 SVG，完美去背景)
+    this.load.image("live2d_protagonist", "/assets/heroes/protagonist_live2d.webp");
+    this.load.image("live2d_huang_zhong", "/assets/heroes/huang_zhong_live2d.webp");
+    this.load.image("live2d_bandit_chief", "/assets/heroes/bandit_chief_live2d.webp");
+    this.load.image("live2d_bandit_thug", "/assets/heroes/bandit_thug_live2d.webp");
+
+    // 載入名將卡牌立繪
     this.load.image("hero_protagonist", "/assets/heroes/protagonist.webp");
     this.load.image("hero_huang_zhong", "/assets/heroes/huang_zhong.webp");
     this.load.image("hero_xiahou_dun", "/assets/heroes/xiahou_dun.webp");

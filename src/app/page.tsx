@@ -23,16 +23,15 @@ export default function MainMenuPage() {
       .catch((err) => console.error("檢查存檔時發生錯誤:", err));
   }, []);
 
-  const handleStartNewGame = async () => {
+  const handleStartNewGame = () => {
     resetGame();
-    // 重置資料庫舊存檔
-    await fetch("/api/save", { method: "DELETE" });
     setStoryStep("INTRO");
-    router.push("/game");
+    fetch("/api/save", { method: "DELETE" }).catch(console.error);
+    window.location.href = "/game";
   };
 
   const handleContinueGame = () => {
-    router.push("/game");
+    window.location.href = "/game";
   };
 
   const handleImportSave = (e: React.ChangeEvent<HTMLInputElement>) => {

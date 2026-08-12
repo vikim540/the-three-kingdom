@@ -54,6 +54,10 @@ export default function GamePage() {
 
   useEffect(() => {
     setIsMounted(true);
+    // 全局禁用瀏覽器右鍵選單，保持遊戲流暢控制
+    const handleContextMenu = (e: MouseEvent) => e.preventDefault();
+    window.addEventListener("contextmenu", handleContextMenu);
+    return () => window.removeEventListener("contextmenu", handleContextMenu);
   }, []);
 
   const buildUnit = (id: string, heroId: string, faction: "PLAYER" | "ENEMY", x: number, y: number): BattleUnit => {

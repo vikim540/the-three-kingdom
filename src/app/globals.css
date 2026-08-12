@@ -4,8 +4,8 @@
   :root {
     --background: #09090b;
     --foreground: #f5f5f4;
-    --font-display: var(--font-noto-serif), "Noto Serif SC", serif;
-    --font-body: var(--font-noto-sans), "Noto Sans SC", sans-serif;
+    --font-display: "Noto Serif TC", "Noto Serif SC", "Kaiti SC", "STKaiti", "PMingLiU", serif;
+    --font-body: "Noto Sans TC", "Noto Sans SC", "Microsoft JhengHei", "PingFang SC", sans-serif;
   }
   
   body {

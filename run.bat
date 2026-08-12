@@ -1,36 +1,45 @@
 @echo off
 chcp 65001 >nul
-title Èý¹úÐÞÏÉ Web MVP - Ò»¼üÆô¶¯½Å±¾
+title ä¸‰åœ‹ä¿®ä»™ Web MVP - å¿«æ·å•Ÿå‹•è…³æœ¬
 
 echo ==================================================
-echo           Èý ¹ú ÐÞ ÏÉ  Web MVP Æô ¶¯ ÂÝ Ðý
+echo           ä¸‰ åœ‹ ä¿® ä»™  Web MVP å•Ÿ å‹• ä¸­
 echo ==================================================
 echo.
 
 where node >nul 2>nul
 if %errorlevel% neq 0 (
-    echo [´íÎó] Î´¼ì²âµ½ Node.js »·¾³£¬ÇëÏÈ°²×° Node.js£¡
-    echo ÏÂÔØµØÖ·: https://nodejs.org/
+    echo [éŒ¯èª¤] æœªæª¢æ¸¬åˆ° Node.js ç’°å¢ƒï¼Œè«‹å…ˆå®‰è£ Node.jsï¼
+    echo ä¸‹è¼‰åœ°å€: https://nodejs.org/
     pause
     exit /b 1
 )
 
 where pnpm >nul 2>nul
 if %errorlevel% neq 0 (
-    echo [ÌáÊ¾] Î´¼ì²âµ½ pnpm£¬ÕýÔÚ×Ô¶¯°²×° pnpm...
+    echo [æç¤º] æœªæª¢æ¸¬åˆ° pnpmï¼Œå°‡è‡ªå‹•å®‰è£ pnpm...
     call npm install -g pnpm
 )
 
 if not exist "node_modules" (
-    echo [ÌáÊ¾] ÕýÔÚ°²×°ÏîÄ¿ÒÀÀµ°ü£¬ÇëÉÔºò...
+    echo [æç¤º] æ­£åœ¨å®‰è£é …ç›®ä¾è³´ï¼Œè«‹ç¨å€™...
     call pnpm install
+)
+
+echo [æ¸…ç†] æ­£åœ¨æ¸…ç†èˆŠçš„ 3000 åŸ å ç”¨èˆ‡å¿«å–...
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr :3000') do (
+    taskkill /f /pid %%a >nul 2>&1
+)
+
+if exist ".next" (
+    rd /s /q ".next" >nul 2>&1
 )
 
 echo.
 echo ==================================================
-echo  [³É¹¦] ¿ª·¢·þÎñÆ÷ÕýÔÚÆô¶¯...
-echo  ä¯ÀÀÆ÷Çë·ÃÎÊ: http://localhost:3000
-echo  °´ Ctrl+C ¿ÉÍ£Ö¹·þÎñÆ÷
+echo  [æˆåŠŸ] æœå‹™å™¨æ­£åœ¨å•Ÿå‹•ä¸­...
+echo  è¨ªå•åœ°å€: http://localhost:3000
+echo  æŒ‰ Ctrl+C å¯åœæ­¢æœå‹™å™¨
 echo ==================================================
 echo.
 

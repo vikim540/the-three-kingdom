@@ -201,18 +201,29 @@ export const FanOutHandCards: React.FC<FanOutHandCardsProps> = ({ onPlaceUnit })
         })}
       </div>
 
-      {/* 拖拽跟隨中的浮動卡牌 */}
+      {/* 拖拽跟隨中的放大浮動 Preview 與亮圈提示 */}
       {draggingUnitId && dragPos && (
         <div
-          className="fixed pointer-events-none z-50 w-28 h-36 -translate-x-1/2 -translate-y-1/2 rounded-xl border-2 border-amber-400 bg-stone-950/90 shadow-[0_0_30px_rgba(245,158,11,0.8)] p-2 flex flex-col justify-between"
+          className="fixed pointer-events-none z-50 w-36 h-48 -translate-x-1/2 -translate-y-1/2 rounded-2xl border-2 border-emerald-400 bg-stone-950/95 shadow-[0_0_50px_rgba(34,197,94,0.9)] p-2.5 flex flex-col justify-between scale-110 animate-pulse cursor-grabbing"
           style={{ left: dragPos.x, top: dragPos.y }}
         >
-          <div className="text-center text-xs font-bold text-amber-300 font-serif-title">
-            放置中...
+          <div className="flex items-center justify-between text-[11px] font-bold border-b border-emerald-500/40 pb-1 text-emerald-300 font-serif-title">
+            <span>✨ 放置名將</span>
+            <span className="text-[10px] text-amber-300">松手登場</span>
           </div>
-          <div className="text-[10px] text-center text-emerald-300 animate-pulse">
-            移至藍色/綠色區域放下
+
+          <div className="text-center my-auto">
+            <div className="text-3xl animate-bounce mb-1">📍</div>
+            <div className="text-xs font-black text-emerald-300 font-serif-title tracking-wider">
+              移至戰術區域放下
+            </div>
+            <div className="text-[10px] text-stone-400 mt-1">
+              (草叢可觸發伏擊形態)
+            </div>
           </div>
+
+          {/* 腳下放亮輪盤 */}
+          <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 w-24 h-8 rounded-full border-2 border-emerald-400 bg-emerald-500/30 blur-xs" />
         </div>
       )}
     </div>
