@@ -14,6 +14,7 @@ export const PhaserGameContent: React.FC<PhaserGameContentProps> = ({ onSceneRea
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
     const container = containerRef.current;
     if (!container || gameRef.current) return;
 

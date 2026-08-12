@@ -42,6 +42,11 @@ export default function GamePage() {
   } = useBattleStore();
 
   const [loading, setLoading] = useState(true);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const buildUnit = (id: string, heroId: string, faction: "PLAYER" | "ENEMY", x: number, y: number): BattleUnit => {
     const heroConfigs: Record<string, typeof PROTAGONIST_HERO> = {
@@ -186,7 +191,7 @@ export default function GamePage() {
     <div className="fixed inset-0 overflow-hidden bg-black">
 
       {/* Phaser 全螢幕 Canvas 底層 */}
-      {(storyStep === "BATTLE" || storyStep === "COMPLETED") && <PhaserGame />}
+      {isMounted && (storyStep === "BATTLE" || storyStep === "COMPLETED") && <PhaserGame />}
 
       {/* 劇情對話（全螢幕覆蓋層） */}
       {storyStep === "INTRO" && (
