@@ -14,10 +14,20 @@ export class BattleScene extends Phaser.Scene {
   }
 
   create() {
+    // 1. 鋪設 2D 黑風山谷山水背景圖
+    const bg = this.add.image(
+      (MAP_SIZE * TILE_SIZE) / 2,
+      (MAP_SIZE * TILE_SIZE) / 2,
+      "battle_bg"
+    );
+    bg.setDisplaySize(MAP_SIZE * TILE_SIZE, MAP_SIZE * TILE_SIZE);
+    bg.setAlpha(0.65);
+
+    // 2. 鋪設 8x8 地形網格
     this.createMapGrid();
     this.highlightGraphics = this.add.graphics();
 
-    // 訂閱 Zustand Store 單位與狀態變化
+    // 3. 訂閱 Zustand Store 單位變化
     this.syncUnitsFromStore();
     useBattleStore.subscribe((state) => {
       this.updateUnitsVisual(state.units);
@@ -62,7 +72,6 @@ export class BattleScene extends Phaser.Scene {
       this.tileSprites[tile.y][tile.x] = sprite;
     });
 
-    // 繪製布陣高亮區域 (Row 6, Row 7)
     this.drawDeploymentHighlights();
   }
 
@@ -70,7 +79,7 @@ export class BattleScene extends Phaser.Scene {
     this.highlightGraphics.clear();
     const store = useBattleStore.getState();
     if (store.phase === "DEPLOYMENT") {
-      this.highlightGraphics.lineStyle(2, 0xeab308, 0.8);
+      this.highlightGraphics.lineStyle(2, 0xeab308, 0.9);
       STAGE_1_BANDIT.playerSpawnTiles.forEach((sp) => {
         this.highlightGraphics.strokeRect(
           sp.x * TILE_SIZE + 2,
@@ -99,31 +108,58 @@ export class BattleScene extends Phaser.Scene {
         // 建立新 Token Container
         container = this.add.container(targetX, targetY);
 
-        // 外框光圈
-        const circleColor = unit.faction === "PLAYER" ? 0x3b82f6 : 0xef4444;
-        const outerCircle = this.add.circle(0, 0, 24, circleColor, 0.8);
-        outerCircle.setStrokeStyle(2, 0xffffff, 0.9);
+        // 光圖案/外框色環
+        const isPlayer = unit.faction === "PLAYER";
+        const ringColor = isPlayer ? 0x3b82f6 : 0xef4444;
 
-        // 角色 Avatar 文字
-        const avatarText = this.add
-          .text(0, -2, unit.heroConfig.avatar, {
-            fontSize: "24px",
-          })
-          .setOrigin(0.5);
+        // 背景底圈
+        const bgCircle = this.add.circle(0, 0, 25, 0x0f172a, 0.9);
+        bgCircle.setStrokeStyle(3, ringColor, 1);
 
-        // 名稱
+        // 載入 2D 美術頭像圖
+        let textureKey = "hero_protagonist";
+        if (unit.heroConfig.id === "hero_huang_zhong") textureKey = "hero_huang_zhong";
+        if (unit.heroConfig.id === "hero_xiahou_dun") textureKey = "hero_xiahou_dun";
+        if (unit.heroConfig.id === "hero_zhao_yun") textureKey = "hero_zhao_yun";
+        if (unit.heroConfig.id === "hero_guo_jia") textureKey = "hero_guo_jia";
+        if (unit.heroConfig.id === "enemy_bandit_chief") textureKey = "enemy_bandit_chief";
+        if (unit.heroConfig.id === "enemy_bandit_thug") textureKey = "enemy_bandit_thug";
+
+        const portraitImg = this.add.image(0, 0, textureKey);
+        portraitImg.setDisplaySize(44, 44);
+
+        // 用形狀做圓形裁切 Mask
+        const shapeMask = this.make.graphics({});
+        shapeMask.fillStyle(0xffffff);
+        shapeMask.fillCircle(targetX, targetY, 22);
+        const mask = shapeMask.createGeometryMask();
+        portraitImg.setMask(mask);
+
+        // 血條圖案
+        const hpBg = this.add.rectangle(0, -28, 44, 6, 0x000000, 0.8);
+        const hpFill = this.add.rectangle(
+          0,
+          -28,
+          42 * (unit.currentHp / unit.maxHp),
+          4,
+          isPlayer ? 0x22c55e : 0xef4444,
+          1
+        );
+        hpFill.setName("hpFill");
+
+        // 英雄姓名標籤
         const nameText = this.add
           .text(0, 26, unit.heroConfig.name, {
-            fontSize: "11px",
+            fontSize: "10px",
             color: "#f8fafc",
             backgroundColor: "#0f172a",
-            padding: { x: 4, y: 2 },
+            padding: { x: 3, y: 1 },
           })
           .setOrigin(0.5);
 
-        container.add([outerCircle, avatarText, nameText]);
+        container.add([bgCircle, portraitImg, hpBg, hpFill, nameText]);
         container.setInteractive(
-          new Phaser.Geom.Circle(0, 0, 24),
+          new Phaser.Geom.Circle(0, 0, 26),
           Phaser.Geom.Circle.Contains
         );
 
@@ -148,7 +184,14 @@ export class BattleScene extends Phaser.Scene {
         });
       }
 
-      // 若已死亡，執行淡出並隱藏
+      // 更新血條度數
+      const hpFill = container.getByName("hpFill") as Phaser.GameObjects.Rectangle;
+      if (hpFill) {
+        const ratio = Math.max(0, unit.currentHp / unit.maxHp);
+        hpFill.setSize(Math.floor(42 * ratio), 4);
+      }
+
+      // 若已死亡，執行淡出
       if (unit.isDead) {
         this.tweens.add({
           targets: container,

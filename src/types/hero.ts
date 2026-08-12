@@ -18,6 +18,7 @@ export interface HeroConfig {
   faction: HeroFaction;
   role: UnitRole;
   avatar: string;
+  imagePath: string; // 2D 全高清人物圖案路徑
   description: string;
   tacticalQuote: string; // 戰術名言
   baseStats: {

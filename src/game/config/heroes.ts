@@ -8,6 +8,7 @@ export const PROTAGONIST_HERO: HeroConfig = {
   faction: "群雄",
   role: "主角",
   avatar: "⚔️",
+  imagePath: "/assets/heroes/protagonist.webp",
   description: "意料之外穿越至三國亂世修仙界的少年修士，御劍自如，擅長誘敵布陣。",
   tacticalQuote: "「以身作餌，引雷入陣！」",
   baseStats: {
@@ -39,6 +40,7 @@ export const SUMMONABLE_HEROES: HeroConfig[] = [
     faction: "蜀",
     role: "弓手",
     avatar: "🏹",
+    imagePath: "/assets/heroes/huang_zhong.webp",
     description: "修仙蜀山老仙將，百步穿楊！置身草叢可進入「伏擊」形態，一箭爆頭敵首。",
     tacticalQuote: "「老夫寶弓一開，百里敵首皆為草木！」",
     baseStats: {
@@ -68,6 +70,7 @@ export const SUMMONABLE_HEROES: HeroConfig[] = [
     faction: "魏",
     role: "前鋒",
     avatar: "🛡️",
+    imagePath: "/assets/heroes/xiahou_dun.webp",
     description: "魔魏鐵血戰將，身懷不滅魔軀。與主角相鄰時獲得「鐵血援護」強力減傷。",
     tacticalQuote: "「拔矢吞睛！區區劫匪焉敢當吾前鋒！」",
     baseStats: {
@@ -97,6 +100,7 @@ export const SUMMONABLE_HEROES: HeroConfig[] = [
     faction: "蜀",
     role: "突騎",
     avatar: "⚡",
+    imagePath: "/assets/heroes/zhao_yun.webp",
     description: "銀槍白馬常山趙子龍，修得紫霄龍膽道，擁有極高機動性與無視防禦突貫能力。",
     tacticalQuote: "「長槍所向，皆為寒芒！」",
     baseStats: {
@@ -126,6 +130,7 @@ export const SUMMONABLE_HEROES: HeroConfig[] = [
     faction: "魏",
     role: "軍師",
     avatar: "📜",
+    imagePath: "/assets/heroes/guo_jia.webp",
     description: "算無遺策的洞冥魔謀，通曉玄冰符陣，能遠程冰封敵方行動力。",
     tacticalQuote: "「算盡天機，勝負皆在吾一念之間。」",
     baseStats: {
@@ -157,6 +162,7 @@ export const ENEMY_BANDIT_CHIEF: HeroConfig = {
   faction: "群雄",
   role: "前鋒",
   avatar: "👹",
+  imagePath: "/assets/heroes/bandit_chief.webp",
   description: "攔路劫財的魔道散修，盤踞山頭為非作歹。",
   tacticalQuote: "「此山是我開！留下修仙資源饒爾不死！」",
   baseStats: {
@@ -179,6 +185,7 @@ export const ENEMY_BANDIT_THUG: HeroConfig = {
   faction: "群雄",
   role: "前鋒",
   avatar: "🧌",
+  imagePath: "/assets/heroes/bandit_thug.webp",
   description: "依附黑風寨的小劫匪，欺軟怕硬。",
   tacticalQuote: "「老大衝啊！」",
   baseStats: {
