@@ -10,6 +10,7 @@ interface DevState {
   isDrawing: boolean;
   currentPoints: Point2D[];
   draggedPointIndex: { regionId: string; pointIdx: number } | null;
+  draggedRegionId: string | null;
 
   toggleDevMode: () => void;
   setDevMode: (active: boolean) => void;
@@ -23,8 +24,8 @@ interface DevState {
   updateRegionType: (id: string, type: RegionType) => void;
   updateRegionScaleWeight: (id: string, weight: number) => void;
   updatePointPosition: (regionId: string, pointIdx: number, point: Point2D) => void;
+  moveWholeRegion: (regionId: string, dx: number, dy: number) => void;
   removePointFromRegion: (regionId: string, pointIdx: number) => void;
-  addPointToRegion: (regionId: string, point: Point2D) => void;
   deleteRegion: (id: string) => void;
   duplicateRegion: (id: string) => void;
   saveRegionsToStorage: () => void;
@@ -43,6 +44,7 @@ export const useDevStore = create<DevState>((set, get) => ({
   isDrawing: false,
   currentPoints: [],
   draggedPointIndex: null,
+  draggedRegionId: null,
 
   toggleDevMode: () => set((state) => ({ isDevMode: !state.isDevMode })),
   setDevMode: (active) => set({ isDevMode: active }),
@@ -98,21 +100,24 @@ export const useDevStore = create<DevState>((set, get) => ({
     set({ regions: nextRegions });
   },
 
-  removePointFromRegion: (regionId, pointIdx) => {
+  moveWholeRegion: (regionId, dx, dy) => {
     const nextRegions = get().regions.map((r) => {
       if (r.id !== regionId) return r;
-      if (r.points.length <= 3) return r; // 保持最少 3 頂點
-      const pts = r.points.filter((_, idx) => idx !== pointIdx);
+      const pts = r.points.map((p) => ({
+        x: Number(Math.max(0, Math.min(1, p.x + dx)).toFixed(3)),
+        y: Number(Math.max(0, Math.min(1, p.y + dy)).toFixed(3)),
+      }));
       return { ...r, points: pts };
     });
     set({ regions: nextRegions });
-    get().saveRegionsToStorage();
   },
 
-  addPointToRegion: (regionId, point) => {
+  removePointFromRegion: (regionId, pointIdx) => {
     const nextRegions = get().regions.map((r) => {
       if (r.id !== regionId) return r;
-      return { ...r, points: [...r.points, point] };
+      if (r.points.length <= 3) return r;
+      const pts = r.points.filter((_, idx) => idx !== pointIdx);
+      return { ...r, points: pts };
     });
     set({ regions: nextRegions });
     get().saveRegionsToStorage();

@@ -76,7 +76,7 @@ export const InGameHUD: React.FC<InGameHUDProps> = ({
         >
           <span className="text-amber-400">❖</span>
           <span>
-            {phase === "DEPLOYMENT" && "布陣階段 (拖拽下方手牌卡牌至亮色區域)"}
+            {phase === "DEPLOYMENT" && "布陣階段 (拖拽手牌至亮色區域放置)"}
             {phase === "BATTLE_IN_PROGRESS" && "兩軍交鋒中"}
             {phase === "VICTORY" && "大獲全勝"}
             {phase === "DEFEAT" && "戰敗失陷"}
@@ -169,11 +169,11 @@ export const InGameHUD: React.FC<InGameHUDProps> = ({
               <div className="text-xs leading-relaxed text-stone-200">
                 {isHuangZhong ? (
                   <>
-                    拖拽<strong className="text-amber-300">黃忠</strong>至側翼<span className="text-emerald-400">草叢伏擊區</span>，觸發神箭狙殺敵首！
+                    拖拽<strong className="text-amber-300">黃忠</strong>至側翼<span className="text-emerald-400">草叢埋伏區</span>，觸發神箭狙殺敵首！
                   </>
                 ) : (
                   <>
-                    拖拽下方名將卡牌至藍/綠多邊形區域，再點擊右下角<strong className="text-emerald-400">【開始戰鬥】</strong>！
+                    拖拽名將卡牌至亮色區域，再點擊左下角圓形<strong className="text-emerald-400">【開戰】</strong>！
                   </>
                 )}
               </div>
@@ -188,29 +188,32 @@ export const InGameHUD: React.FC<InGameHUDProps> = ({
         </div>
       )}
 
-      {/* ─── 右下角：資源、背包與「開始戰鬥」大按鈕 (徹底防止與底部中央手牌重合) ─── */}
-      <div className="fixed bottom-5 right-5 z-30 flex items-center gap-3 pointer-events-auto">
-        {phase === "DEPLOYMENT" && (
-          <div className="flex items-center gap-2 mr-2">
-            {isHuangZhong && (
-              <button
-                onClick={onBaitAction}
-                className="px-4 py-2.5 rounded-xl border-2 border-amber-500/80 font-bold text-xs text-amber-200 shadow-lg flex items-center gap-1.5 transition hover:scale-105"
-                style={{ background: "linear-gradient(135deg, rgba(120,40,10,0.95), rgba(180,70,15,0.9))" }}
-              >
-                <Crosshair className="w-4 h-4" /> 假逃誘敵
-              </button>
-            )}
-            <button
-              onClick={onStartBattle}
-              className="px-6 py-2.5 rounded-xl border-2 border-emerald-400 font-black font-serif-title text-sm text-emerald-100 shadow-[0_0_20px_rgba(16,185,129,0.5)] flex items-center gap-2 transition hover:scale-105 animate-pulse"
-              style={{ background: "linear-gradient(135deg, rgba(6,78,59,0.95), rgba(4,120,87,0.9))" }}
-            >
-              <Play className="w-4 h-4 fill-emerald-100" /> 開始戰鬥！
-            </button>
-          </div>
-        )}
+      {/* ─── 左下角：圓形【開始戰鬥】大按鈕 (下移至左下角，圓形霸氣設計) ─── */}
+      {phase === "DEPLOYMENT" && (
+        <div className="fixed bottom-6 left-6 z-40 flex items-center gap-3 pointer-events-auto">
+          <button
+            onClick={onStartBattle}
+            className="w-18 h-18 rounded-full border-2 border-emerald-400 font-black font-serif-title text-sm text-emerald-100 shadow-[0_0_30px_rgba(16,185,129,0.6)] flex flex-col items-center justify-center transition-all duration-200 hover:scale-110 active:scale-95 animate-pulse"
+            style={{ background: "linear-gradient(135deg, rgba(6,78,59,0.98), rgba(4,120,87,0.92))" }}
+          >
+            <Play className="w-6 h-6 fill-emerald-100" />
+            <span className="text-[11px] font-bold tracking-widest mt-0.5">開戰</span>
+          </button>
 
+          {isHuangZhong && (
+            <button
+              onClick={onBaitAction}
+              className="px-3.5 py-2 rounded-xl border-2 border-amber-500/80 font-bold text-xs text-amber-200 shadow-lg flex items-center gap-1 transition hover:scale-105"
+              style={{ background: "linear-gradient(135deg, rgba(120,40,10,0.95), rgba(180,70,15,0.9))" }}
+            >
+              <Crosshair className="w-3.5 h-3.5" /> 假逃誘敵
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ─── 右下角：資源與背包快捷入口 (B / TAB) ─── */}
+      <div className="fixed bottom-6 right-6 z-30 flex items-center gap-3 pointer-events-auto">
         <div className="px-3 py-2 rounded-xl border border-stone-700 bg-stone-950/85 text-xs font-bold flex items-center gap-3 backdrop-blur-md">
           <span className="text-amber-300">💰 {spiritStones}</span>
           <span className="text-purple-300">✨ {heroSouls}</span>

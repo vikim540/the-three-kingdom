@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useDevStore } from "@/stores/useDevStore";
 import { RegionType, REGION_COLORS, Point2D } from "@/types/region";
-import { Settings, Plus, Trash2, Copy, Save, CheckCircle } from "lucide-react";
+import { Settings, Plus, Trash2, Copy, Save, CheckCircle, Move } from "lucide-react";
 
 export const DevModeEditor: React.FC = () => {
   const {
@@ -23,6 +23,7 @@ export const DevModeEditor: React.FC = () => {
     updateRegionType,
     updateRegionScaleWeight,
     updatePointPosition,
+    moveWholeRegion,
     removePointFromRegion,
     deleteRegion,
     duplicateRegion,
@@ -31,6 +32,7 @@ export const DevModeEditor: React.FC = () => {
 
   const [mousePos, setMousePos] = useState<Point2D | null>(null);
   const [activeDraggingPt, setActiveDraggingPt] = useState<{ regionId: string; pointIdx: number } | null>(null);
+  const [activeDraggingRegion, setActiveDraggingRegion] = useState<{ regionId: string; startPos: Point2D } | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -40,12 +42,13 @@ export const DevModeEditor: React.FC = () => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
         e.preventDefault();
         saveRegionsToStorage();
-        setToastMsg("💾 關卡多邊形區域 JSON 已成功保存 (src/game/config/level_1_polygons.json)！");
-        setTimeout(() => setToastMsg(null), 3000);
+        setToastMsg("💾 關卡多邊形區域 JSON 已成功保存！");
+        setTimeout(() => setToastMsg(null), 2500);
       }
       if (e.key === "Escape") {
         clearCurrentPoints();
         setActiveDraggingPt(null);
+        setActiveDraggingRegion(null);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -54,8 +57,9 @@ export const DevModeEditor: React.FC = () => {
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!isDevMode || !containerRef.current) return;
-    if (activeDraggingPt) {
+    if (activeDraggingPt || activeDraggingRegion) {
       setActiveDraggingPt(null);
+      setActiveDraggingRegion(null);
       saveRegionsToStorage();
       return;
     }
@@ -77,13 +81,21 @@ export const DevModeEditor: React.FC = () => {
 
     setMousePos({ x, y });
 
-    // 若正處於頂點拖拽狀態，即時更新頂點座標
+    // 拖拽單個頂點
     if (activeDraggingPt) {
       updatePointPosition(
         activeDraggingPt.regionId,
         activeDraggingPt.pointIdx,
         { x: Number(x.toFixed(3)), y: Number(y.toFixed(3)) }
       );
+    }
+
+    // 拖拽整個多邊形區域位置
+    if (activeDraggingRegion) {
+      const dx = x - activeDraggingRegion.startPos.x;
+      const dy = y - activeDraggingRegion.startPos.y;
+      moveWholeRegion(activeDraggingRegion.regionId, dx, dy);
+      setActiveDraggingRegion({ regionId: activeDraggingRegion.regionId, startPos: { x, y } });
     }
   };
 
@@ -119,8 +131,9 @@ export const DevModeEditor: React.FC = () => {
           onClick={handleCanvasClick}
           onMouseMove={handleMouseMove}
           onMouseUp={() => {
-            if (activeDraggingPt) {
+            if (activeDraggingPt || activeDraggingRegion) {
               setActiveDraggingPt(null);
+              setActiveDraggingRegion(null);
               saveRegionsToStorage();
             }
           }}
@@ -139,18 +152,21 @@ export const DevModeEditor: React.FC = () => {
 
               return (
                 <g key={region.id}>
-                  {/* 多邊形填色區域 */}
+                  {/* 多邊形填色區域 (支援整塊拖拽位置) */}
                   <polygon
                     points={region.points.map((p) => `${p.x * 100}%,${p.y * 100}%`).join(" ")}
                     fill={colorConfig.fill}
                     stroke={isSelected ? "#ffffff" : colorConfig.stroke}
                     strokeWidth={isSelected ? 3 : 2}
                     strokeDasharray={isSelected ? "4 4" : undefined}
-                    onClick={(e) => {
+                    onMouseDown={(e) => {
                       e.stopPropagation();
                       setSelectedRegionId(region.id);
+                      if (mousePos) {
+                        setActiveDraggingRegion({ regionId: region.id, startPos: mousePos });
+                      }
                     }}
-                    className="transition-all hover:opacity-90 cursor-pointer"
+                    className="transition-all hover:opacity-90 cursor-grab active:cursor-grabbing"
                   />
 
                   {/* 區塊名稱標籤 */}
@@ -166,7 +182,7 @@ export const DevModeEditor: React.FC = () => {
                     {region.name} ({colorConfig.label})
                   </text>
 
-                  {/* 頂點節點 (支援滑鼠拖拽與右鍵刪除) */}
+                  {/* 頂點節點 (支援單獨頂點拖拽與右鍵刪除) */}
                   {region.points.map((pt, idx) => {
                     const isDraggingThis =
                       activeDraggingPt?.regionId === region.id && activeDraggingPt?.pointIdx === idx;
@@ -225,20 +241,20 @@ export const DevModeEditor: React.FC = () => {
             )}
           </svg>
 
-          {/* ─── 左下角繪製與編輯控制面板 ─── */}
+          {/* ─── 左下角精簡編輯控制面板 ─── */}
           <div
             onClick={(e) => e.stopPropagation()}
             className="absolute bottom-6 left-6 z-50 w-84 rounded-2xl border-2 border-amber-600/60 p-4 shadow-2xl backdrop-blur-xl bg-stone-950/95 text-stone-200"
           >
             <div className="flex items-center justify-between border-b border-stone-800 pb-2 mb-3">
               <span className="font-bold text-amber-400 text-xs flex items-center gap-1.5">
-                <Settings className="w-4 h-4" /> 關卡多邊形區域編輯器
+                <Settings className="w-4 h-4" /> 多邊形區域編輯面板
               </span>
               <button
                 onClick={() => {
                   saveRegionsToStorage();
-                  setToastMsg("💾 關卡多邊形 JSON 已保存！");
-                  setTimeout(() => setToastMsg(null), 3000);
+                  setToastMsg("💾 關卡區域 JSON 已保存！");
+                  setTimeout(() => setToastMsg(null), 2500);
                 }}
                 className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[11px] font-bold flex items-center gap-1 transition"
                 title="Ctrl + S 快速保存"
@@ -247,11 +263,11 @@ export const DevModeEditor: React.FC = () => {
               </button>
             </div>
 
-            {/* 繪製新區域控制 */}
+            {/* 繪製新區域類型選擇 */}
             <div className="space-y-2 mb-3">
               <div className="text-[11px] font-semibold text-stone-400">選擇新區域類型：</div>
               <div className="grid grid-cols-3 gap-1.5 text-[11px]">
-                {(["ROAD", "AMBUSH", "PLAYER_SPAWN", "ENEMY_SPAWN", "AIR_WALL", "DISABLED"] as RegionType[]).map(
+                {(["ROAD", "AMBUSH", "PLAYER_SPAWN", "ENEMY_SPAWN", "SAFE_ZONE", "AIR_WALL"] as RegionType[]).map(
                   (type) => (
                     <button
                       key={type}
@@ -292,16 +308,16 @@ export const DevModeEditor: React.FC = () => {
                   onClick={() => setIsDrawing(true)}
                   className="w-full py-1.5 rounded-lg bg-amber-600/80 hover:bg-amber-600 text-white font-bold text-xs flex items-center justify-center gap-1 mt-1"
                 >
-                  <Plus className="w-3.5 h-3.5" /> 左鍵點擊畫布開始繪製
+                  <Plus className="w-3.5 h-3.5" /> 左鍵點擊畫布繪製新多邊形
                 </button>
               )}
             </div>
 
-            {/* 選中的區域屬性編輯器 */}
+            {/* 選中的區域屬性編輯與刪除 */}
             {selectedRegion ? (
               <div className="border-t border-stone-800 pt-3 space-y-2 text-xs">
                 <div className="flex items-center justify-between font-bold text-amber-300">
-                  <span>選中區域：{selectedRegion.name}</span>
+                  <span className="truncate max-w-[170px]">區域：{selectedRegion.name}</span>
                   <div className="flex gap-1">
                     <button
                       onClick={() => duplicateRegion(selectedRegion.id)}
@@ -312,10 +328,10 @@ export const DevModeEditor: React.FC = () => {
                     </button>
                     <button
                       onClick={() => deleteRegion(selectedRegion.id)}
-                      className="p-1 rounded bg-red-950 hover:bg-red-900 text-red-300 border border-red-800"
-                      title="刪除區域"
+                      className="p-1 rounded bg-red-950 hover:bg-red-900 text-red-300 border border-red-800 flex items-center gap-1 px-2 text-[10px]"
+                      title="刪除此區域"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Trash2 className="w-3.5 h-3.5" /> 刪除
                     </button>
                   </div>
                 </div>
@@ -327,7 +343,7 @@ export const DevModeEditor: React.FC = () => {
                     onChange={(e) => updateRegionType(selectedRegion.id, e.target.value as RegionType)}
                     className="flex-1 bg-stone-900 border border-stone-700 rounded p-1 text-amber-200 font-bold"
                   >
-                    {(["ROAD", "AMBUSH", "PLAYER_SPAWN", "ENEMY_SPAWN", "AIR_WALL", "DISABLED"] as RegionType[]).map((t) => (
+                    {(["ROAD", "AMBUSH", "PLAYER_SPAWN", "ENEMY_SPAWN", "SAFE_ZONE", "AIR_WALL"] as RegionType[]).map((t) => (
                       <option key={t} value={t}>
                         {REGION_COLORS[t].label}
                       </option>
@@ -353,13 +369,14 @@ export const DevModeEditor: React.FC = () => {
                   />
                 </div>
 
-                <div className="text-[10px] text-stone-500 pt-1">
-                  💡 提示：按住頂點圓圈可自由拖拽；右鍵頂點可刪除該頂點。
+                <div className="text-[10px] text-stone-400 pt-1 leading-relaxed flex items-center gap-1">
+                  <Move className="w-3 h-3 text-amber-400" />
+                  <span>按住多邊形內即可拖拽整體位置；拖動圓點可修改頂點。</span>
                 </div>
               </div>
             ) : (
               <div className="border-t border-stone-800 pt-2 text-[11px] text-stone-500 text-center">
-                點擊任意多邊形可進行屬性與頂點編輯
+                點擊多邊形可進行位移拖拽、屬性與刪除操作
               </div>
             )}
           </div>
