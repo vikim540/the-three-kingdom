@@ -14,14 +14,16 @@ export class BattleScene extends Phaser.Scene {
   }
 
   create() {
-    // 1. 鋪設 2D 黑風山谷山水背景圖
-    const bg = this.add.image(
-      (MAP_SIZE * TILE_SIZE) / 2,
-      (MAP_SIZE * TILE_SIZE) / 2,
-      "battle_bg"
-    );
-    bg.setDisplaySize(MAP_SIZE * TILE_SIZE, MAP_SIZE * TILE_SIZE);
-    bg.setAlpha(0.65);
+    const canvasCenter = (MAP_SIZE * TILE_SIZE) / 2; // 256px
+
+    // 1. 鋪設戰場背景（優先使用 2D 手繪 WebP 圖，失敗時備用彩色彩色水墨）
+    if (this.textures.exists("battle_bg")) {
+      const bg = this.add.image(canvasCenter, canvasCenter, "battle_bg");
+      bg.setDisplaySize(MAP_SIZE * TILE_SIZE, MAP_SIZE * TILE_SIZE);
+      bg.setAlpha(0.85);
+    } else {
+      this.add.image(canvasCenter, canvasCenter, "fallback_bg");
+    }
 
     // 2. 鋪設 8x8 地形網格
     this.createMapGrid();
@@ -42,13 +44,33 @@ export class BattleScene extends Phaser.Scene {
       if (tile.terrain === "BUSH") textureKey = "tile_bush";
       if (tile.terrain === "OBSTACLE") textureKey = "tile_obstacle";
 
+      const tileX = tile.x * TILE_SIZE + TILE_SIZE / 2;
+      const tileY = tile.y * TILE_SIZE + TILE_SIZE / 2;
+
       const sprite = this.add
-        .sprite(
-          tile.x * TILE_SIZE + TILE_SIZE / 2,
-          tile.y * TILE_SIZE + TILE_SIZE / 2,
-          textureKey
-        )
+        .sprite(tileX, tileY, textureKey)
         .setInteractive();
+
+      // 地形標籤文字（清淅可見）
+      if (tile.terrain === "BUSH") {
+        this.add
+          .text(tileX, tileY + 18, "🌿伏擊區", {
+            fontSize: "10px",
+            color: "#6ee7b7",
+            backgroundColor: "#064e3b",
+            padding: { x: 2, y: 1 },
+          })
+          .setOrigin(0.5);
+      } else if (tile.terrain === "OBSTACLE") {
+        this.add
+          .text(tileX, tileY + 18, "⛔黑石", {
+            fontSize: "10px",
+            color: "#fca5a5",
+            backgroundColor: "#450a0a",
+            padding: { x: 2, y: 1 },
+          })
+          .setOrigin(0.5);
+      }
 
       // 點擊格子布陣
       sprite.on("pointerdown", () => {
@@ -79,13 +101,14 @@ export class BattleScene extends Phaser.Scene {
     this.highlightGraphics.clear();
     const store = useBattleStore.getState();
     if (store.phase === "DEPLOYMENT") {
-      this.highlightGraphics.lineStyle(2, 0xeab308, 0.9);
+      // 繪製高亮金黃色布陣邊框
+      this.highlightGraphics.lineStyle(3, 0xfacc15, 1);
       STAGE_1_BANDIT.playerSpawnTiles.forEach((sp) => {
         this.highlightGraphics.strokeRect(
-          sp.x * TILE_SIZE + 2,
-          sp.y * TILE_SIZE + 2,
-          TILE_SIZE - 4,
-          TILE_SIZE - 4
+          sp.x * TILE_SIZE + 3,
+          sp.y * TILE_SIZE + 3,
+          TILE_SIZE - 6,
+          TILE_SIZE - 6
         );
       });
     }

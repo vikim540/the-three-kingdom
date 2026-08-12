@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Sparkles, ArrowRight } from "lucide-react";
+import { Sparkles, ArrowRight, FastForward } from "lucide-react";
 
 interface StoryDialogProps {
   onComplete: () => void;
@@ -62,7 +62,7 @@ export const StoryDialog: React.FC<StoryDialogProps> = ({ onComplete }) => {
         onClick={handleNext}
         className="w-full max-w-4xl cursor-pointer rounded-2xl p-6 md:p-8 border border-amber-500/40 bg-slate-900/95 shadow-[0_0_40px_rgba(234,179,8,0.25)] transition-all hover:border-amber-400"
       >
-        {/* 說話者標頭 */}
+        {/* 說話者標頭與跳過按鈕 */}
         <div className="flex items-center justify-between mb-4 pb-3 border-b border-amber-500/20">
           <div className="flex items-center gap-3">
             <span className="text-3xl p-2 rounded-xl bg-black/40 border border-amber-500/30">
@@ -73,10 +73,26 @@ export const StoryDialog: React.FC<StoryDialogProps> = ({ onComplete }) => {
               <p className="text-xs text-amber-400/60">第一章 • 異世降臨</p>
             </div>
           </div>
-          <span className="text-xs text-slate-400 flex items-center gap-1">
-            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-            點擊任意處繼續 ({currentStepIndex + 1}/{STORY_STEPS.length})
-          </span>
+
+          <div className="flex items-center gap-3">
+            {/* 跳過劇情按鈕 */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onComplete();
+              }}
+              className="px-3.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/40 border border-amber-500/40 text-amber-300 hover:text-amber-200 text-xs font-bold transition flex items-center gap-1.5 shadow-md"
+              title="直接跳過劇情並開啟名將召喚"
+            >
+              <FastForward className="w-3.5 h-3.5" />
+              <span>跳過劇情</span>
+            </button>
+
+            <span className="text-xs text-slate-400 hidden sm:flex items-center gap-1">
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              ({currentStepIndex + 1}/{STORY_STEPS.length})
+            </span>
+          </div>
         </div>
 
         {/* 劇情內文 */}
@@ -87,10 +103,14 @@ export const StoryDialog: React.FC<StoryDialogProps> = ({ onComplete }) => {
           )}
         </div>
 
-        {/* 提示箭頭 */}
-        <div className="flex justify-end mt-4">
+        {/* 提示箭頭與按鈕區 */}
+        <div className="flex justify-between items-center mt-4 pt-2 border-t border-slate-800/80">
+          <span className="text-xs text-slate-400">點擊對話框任意處可加快打字...</span>
           <button
-            onClick={handleNext}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleNext();
+            }}
             className="flex items-center gap-2 px-5 py-2 rounded-lg bg-amber-500/20 border border-amber-500/40 text-amber-300 hover:bg-amber-500/30 text-sm font-semibold transition"
           >
             <span>{currentStepIndex === STORY_STEPS.length - 1 ? "開啟名將召喚" : "下一步"}</span>

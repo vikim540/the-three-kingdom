@@ -1,5 +1,5 @@
 import * as Phaser from "phaser";
-import { TILE_SIZE } from "../config/constants";
+import { TILE_SIZE, MAP_SIZE } from "../config/constants";
 
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -19,39 +19,55 @@ export class BootScene extends Phaser.Scene {
   }
 
   create() {
-    // 資材載入完成後建立動態圖案
     this.createTextureGraphics();
     this.scene.start("BattleScene");
   }
 
   private createTextureGraphics() {
-    // 1. 普通平地圖案 (半透明古石砌紋理)
+    const canvasSize = MAP_SIZE * TILE_SIZE; // 512px
+
+    // 0. 玄幻戰場山水背景備用圖案 (備用向量藝術)
+    const bgG = this.make.graphics({ x: 0, y: 0 });
+    bgG.fillGradientStyle(0x0f172a, 0x1e1b4b, 0x064e3b, 0x0284c7, 1);
+    bgG.fillRect(0, 0, canvasSize, canvasSize);
+    bgG.lineStyle(1, 0x38bdf8, 0.2);
+    for (let i = 0; i < canvasSize; i += 32) {
+      bgG.lineBetween(i, 0, i, canvasSize);
+      bgG.lineBetween(0, i, canvasSize, i);
+    }
+    bgG.generateTexture("fallback_bg", canvasSize, canvasSize);
+
+    // 1. 普通平地圖案 (青石古陣紋理)
     const normalG = this.make.graphics({ x: 0, y: 0 });
-    normalG.fillStyle(0x1e293b, 0.65);
+    normalG.fillStyle(0x1e293b, 0.95);
     normalG.fillRect(0, 0, TILE_SIZE, TILE_SIZE);
-    normalG.lineStyle(1, 0x475569, 0.6);
-    normalG.strokeRect(0, 0, TILE_SIZE, TILE_SIZE);
+    normalG.lineStyle(2, 0x475569, 0.8);
+    normalG.strokeRect(1, 1, TILE_SIZE - 2, TILE_SIZE - 2);
+    // 陣法金邊
+    normalG.lineStyle(1, 0xca8a04, 0.4);
+    normalG.strokeRect(4, 4, TILE_SIZE - 8, TILE_SIZE - 8);
     normalG.generateTexture("tile_normal", TILE_SIZE, TILE_SIZE);
 
-    // 2. 密草叢圖案 (幽綠秘草)
+    // 2. 密草叢圖案 (幽綠秘草・伏擊專用)
     const bushG = this.make.graphics({ x: 0, y: 0 });
-    bushG.fillStyle(0x064e3b, 0.75);
+    bushG.fillStyle(0x065f46, 0.95);
     bushG.fillRect(0, 0, TILE_SIZE, TILE_SIZE);
-    bushG.lineStyle(2, 0x10b981, 0.9);
-    bushG.strokeRect(0, 0, TILE_SIZE, TILE_SIZE);
-    bushG.fillStyle(0x059669, 0.9);
-    bushG.fillCircle(TILE_SIZE * 0.3, TILE_SIZE * 0.4, 10);
-    bushG.fillCircle(TILE_SIZE * 0.7, TILE_SIZE * 0.4, 10);
-    bushG.fillCircle(TILE_SIZE * 0.5, TILE_SIZE * 0.6, 12);
+    bushG.lineStyle(2, 0x10b981, 1);
+    bushG.strokeRect(1, 1, TILE_SIZE - 2, TILE_SIZE - 2);
+    // 仙草葉細節
+    bushG.fillStyle(0x34d399, 1);
+    bushG.fillCircle(TILE_SIZE * 0.3, TILE_SIZE * 0.35, 10);
+    bushG.fillCircle(TILE_SIZE * 0.7, TILE_SIZE * 0.35, 10);
+    bushG.fillCircle(TILE_SIZE * 0.5, TILE_SIZE * 0.65, 14);
     bushG.generateTexture("tile_bush", TILE_SIZE, TILE_SIZE);
 
-    // 3. 崎嶇岩石圖案 (黑石陣)
+    // 3. 崎嶇岩石圖案 (魔熔岩石・障礙區)
     const obsG = this.make.graphics({ x: 0, y: 0 });
-    obsG.fillStyle(0x0f172a, 0.85);
+    obsG.fillStyle(0x450a0a, 0.95);
     obsG.fillRect(0, 0, TILE_SIZE, TILE_SIZE);
-    obsG.lineStyle(2, 0xef4444, 0.7);
-    obsG.strokeRect(0, 0, TILE_SIZE, TILE_SIZE);
-    obsG.fillStyle(0x334155, 1);
+    obsG.lineStyle(2, 0xef4444, 1);
+    obsG.strokeRect(1, 1, TILE_SIZE - 2, TILE_SIZE - 2);
+    obsG.fillStyle(0xd97706, 1);
     obsG.fillTriangle(
       TILE_SIZE * 0.2, TILE_SIZE * 0.8,
       TILE_SIZE * 0.5, TILE_SIZE * 0.2,

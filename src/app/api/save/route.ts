@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
-import { db } from "@/db";
+import { db, ensureDbInitialized } from "@/db";
 import { saveFiles, players, unlockedHeroes } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { generateId } from "@/lib/id";
 
 export async function GET() {
   try {
+    await ensureDbInitialized();
     const saves = await db.select().from(saveFiles).limit(1);
     if (saves.length === 0) {
       return NextResponse.json({ success: true, save: null });
@@ -21,6 +22,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
+    await ensureDbInitialized();
     const body = await req.json();
     const { selectedHeroId, storyStep, gameData } = body;
 
@@ -94,6 +96,7 @@ export async function POST(req: Request) {
 
 export async function DELETE() {
   try {
+    await ensureDbInitialized();
     await db.delete(saveFiles);
     await db.delete(unlockedHeroes);
     return NextResponse.json({ success: true, message: "存檔已重置" });
