@@ -1,0 +1,86 @@
+[
+  {
+    "id": "reg_player_spawn",
+    "name": "近處玩家布陣主力區",
+    "type": "PLAYER_SPAWN",
+    "points": [
+      { "x": 0.22, "y": 0.72 },
+      { "x": 0.78, "y": 0.72 },
+      { "x": 0.85, "y": 0.92 },
+      { "x": 0.15, "y": 0.92 }
+    ],
+    "scaleWeight": 1.0
+  },
+  {
+    "id": "reg_ambush_left",
+    "name": "左側黃忠草叢伏擊區",
+    "type": "AMBUSH",
+    "points": [
+      { "x": 0.05, "y": 0.65 },
+      { "x": 0.21, "y": 0.65 },
+      { "x": 0.14, "y": 0.88 },
+      { "x": 0.02, "y": 0.88 }
+    ],
+    "scaleWeight": 0.95
+  },
+  {
+    "id": "reg_ambush_right",
+    "name": "右側黃忠草叢伏擊區",
+    "type": "AMBUSH",
+    "points": [
+      { "x": 0.79, "y": 0.65 },
+      { "x": 0.95, "y": 0.65 },
+      { "x": 0.98, "y": 0.88 },
+      { "x": 0.86, "y": 0.88 }
+    ],
+    "scaleWeight": 0.95
+  },
+  {
+    "id": "reg_main_road",
+    "name": "峽谷中路主戰道",
+    "type": "ROAD",
+    "points": [
+      { "x": 0.35, "y": 0.28 },
+      { "x": 0.65, "y": 0.28 },
+      { "x": 0.77, "y": 0.71 },
+      { "x": 0.23, "y": 0.71 }
+    ],
+    "scaleWeight": 0.75
+  },
+  {
+    "id": "reg_enemy_spawn",
+    "name": "遠處劫匪登場區",
+    "type": "ENEMY_SPAWN",
+    "points": [
+      { "x": 0.38, "y": 0.16 },
+      { "x": 0.62, "y": 0.16 },
+      { "x": 0.64, "y": 0.27 },
+      { "x": 0.36, "y": 0.27 }
+    ],
+    "scaleWeight": 0.5
+  },
+  {
+    "id": "reg_airwall_left",
+    "name": "左側懸崖空氣牆",
+    "type": "AIR_WALL",
+    "points": [
+      { "x": 0.0, "y": 0.0 },
+      { "x": 0.35, "y": 0.0 },
+      { "x": 0.2, "y": 0.6 },
+      { "x": 0.0, "y": 0.6 }
+    ],
+    "scaleWeight": 0.5
+  },
+  {
+    "id": "reg_airwall_right",
+    "name": "右側懸崖空氣牆",
+    "type": "AIR_WALL",
+    "points": [
+      { "x": 0.65, "y": 0.0 },
+      { "x": 1.0, "y": 0.0 },
+      { "x": 1.0, "y": 0.6 },
+      { "x": 0.8, "y": 0.6 }
+    ],
+    "scaleWeight": 0.5
+  }
+]

@@ -5,12 +5,17 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useGameStore, StoryStep } from "@/stores/useGameStore";
 import { useBattleStore } from "@/stores/useBattleStore";
+import { useDevStore } from "@/stores/useDevStore";
 import { StoryDialog } from "@/components/game/StoryDialog";
 import { SummonModal } from "@/components/game/SummonModal";
 import { InGameHUD } from "@/components/game/InGameHUD";
+import { FanOutHandCards } from "@/components/game/FanOutHandCards";
+import { RadialCommandMenu } from "@/components/game/RadialCommandMenu";
+import { InventoryModal } from "@/components/game/InventoryModal";
 import { BattleResultModal } from "@/components/game/BattleResultModal";
 import { HeroConfig } from "@/types/hero";
 import { BattleUnit, TacticalActionType } from "@/types/game";
+import { isPointInPolygon } from "@/types/region";
 import { STAGE_1_BANDIT } from "@/game/config/stages";
 import {
   PROTAGONIST_HERO,
@@ -20,14 +25,13 @@ import {
 } from "@/game/config/heroes";
 import { executeBattleStep } from "@/game/systems/CombatSystem";
 
-// Phaser 全螢幕 Canvas（fixed inset-0）
 const PhaserGame = dynamic(() => import("@/game/PhaserGame"), {
   ssr: false,
   loading: () => (
     <div className="fixed inset-0 bg-zinc-950 flex flex-col items-center justify-center gap-4">
-      <div className="text-4xl animate-bounce">⚔️</div>
-      <div className="text-amber-400 font-bold font-serif-title text-xl tracking-widest animate-pulse">
-        黑風山谷 正在顯現...
+      <div className="text-5xl animate-bounce">⚔️</div>
+      <div className="text-amber-400 font-bold font-serif-title text-2xl tracking-widest animate-pulse">
+        修仙戰場 正在加載...
       </div>
     </div>
   ),
@@ -39,7 +43,10 @@ export default function GamePage() {
   const {
     units, setPhase, setUnits, setActiveAction,
     addCombatLog, setReward, setTacticalOutcome, resetBattle,
+    selectedUnitId, setSelectedUnitId,
   } = useBattleStore();
+
+  const { regions } = useDevStore();
 
   const [loading, setLoading] = useState(true);
   const [isMounted, setIsMounted] = useState(false);
@@ -78,19 +85,19 @@ export default function GamePage() {
   };
 
   const initBattleUnits = useCallback(() => {
-    const heroId = selectedHeroId || SUMMONABLE_HEROES[0].id;
+    const heroId = selectedHeroId || SUMMONABLE_HEROES[0].id; // 預設黃忠
     const playerUnits = [
-      buildUnit("u_protagonist", "hero_protagonist", "PLAYER", STAGE_1_BANDIT.playerSpawnTiles[0].x, STAGE_1_BANDIT.playerSpawnTiles[0].y),
-      buildUnit(`u_${heroId}`, heroId, "PLAYER", STAGE_1_BANDIT.playerSpawnTiles[1].x, STAGE_1_BANDIT.playerSpawnTiles[1].y),
+      buildUnit("u_protagonist", "hero_protagonist", "PLAYER", 0.5, 0.85),
+      buildUnit(`u_${heroId}`, heroId, "PLAYER", 0.35, 0.82),
     ];
     const enemyUnits = STAGE_1_BANDIT.enemies.map((e, i) =>
-      buildUnit(`enemy_${i}`, e.heroId, "ENEMY", e.x, e.y)
+      buildUnit(`enemy_${i}`, e.heroId, "ENEMY", 0.35 + i * 0.08, 0.2)
     );
     setUnits([...playerUnits, ...enemyUnits]);
     setPhase("DEPLOYMENT");
   }, [selectedHeroId, setUnits, setPhase]);
 
-  // 載入存檔
+  // 載入 SQLite 存檔
   useEffect(() => {
     fetch("/api/save")
       .then((r) => r.json())
@@ -108,6 +115,35 @@ export default function GamePage() {
     if (storyStep === "BATTLE" && units.length === 0) initBattleUnits();
   }, [storyStep, units.length, initBattleUnits]);
 
+  // 放置手牌單位到場面多邊形區域
+  const handlePlaceUnit = (unitInstanceId: string, normX: number, normY: number) => {
+    const unit = units.find((u) => u.instanceId === unitInstanceId);
+    if (!unit) return;
+
+    // 檢查是否落在埋伏區多邊形內
+    const inAmbush = regions.some(
+      (r) => r.type === "AMBUSH" && isPointInPolygon({ x: normX, y: normY }, r.points)
+    );
+
+    setUnits(
+      units.map((u) =>
+        u.instanceId === unitInstanceId
+          ? {
+              ...u,
+              x: normX,
+              y: normY,
+              statusEffects: inAmbush ? ["AMBUSH"] : [],
+            }
+          : u
+      )
+    );
+
+    addCombatLog(
+      `📍 ${unit.heroConfig.name} 佈陣登場！${inAmbush ? " ✦ 進入草叢伏擊形態！" : ""}`,
+      inAmbush ? "skill" : "info"
+    );
+  };
+
   const handleConfirmSummon = async (hero: HeroConfig) => {
     setSelectedHeroId(hero.id);
     setStoryStep("BATTLE");
@@ -120,26 +156,30 @@ export default function GamePage() {
 
   const handleStartBattle = () => {
     setPhase("BATTLE_IN_PROGRESS");
-    addCombatLog("⚔️ 兩軍交鋒！黑風山谷之戰開始！", "info");
+    addCombatLog("⚔️ 兩軍交鋒！黑風山谷遭遇戰開始！", "info");
     runBattleLoop();
   };
 
   const handleBaitAction = () => {
-    addCombatLog("🏹 黃忠蟄伏草叢，主角施展假逃誘敵之計！", "skill");
+    addCombatLog("🏹 黃忠伏擊草叢，主角施展假逃誘敵之計！", "skill");
     handleStartBattle();
   };
 
   const handleExecuteAction = (action: TacticalActionType) => {
     setActiveAction(action);
-    if (action === "ITEM") {
-      addCombatLog("🧪 服用紫霄丹，恢復 50 生命！", "skill");
-      setUnits(units.map((u) =>
-        u.faction === "PLAYER" && !u.isDead
-          ? { ...u, currentHp: Math.min(u.maxHp, u.currentHp + 50) }
-          : u
-      ));
+    if (action === "SKILL") {
+      addCombatLog("🏹 觸發【神箭伏擊】：黃忠於草叢一箭爆頭敵首！", "skill");
+    } else if (action === "ITEM") {
+      addCombatLog("🧪 服用紫霄修仙丹，恢復全隊 50 生命！", "skill");
+      setUnits(
+        units.map((u) =>
+          u.faction === "PLAYER" && !u.isDead
+            ? { ...u, currentHp: Math.min(u.maxHp, u.currentHp + 50) }
+            : u
+        )
+      );
     } else if (action === "FLEE") {
-      addCombatLog("🏃 向逃生法陣撤退！", "info");
+      addCombatLog("🏃 全隊向後方陣地撤退！", "info");
       handleStartBattle();
     }
   };
@@ -148,7 +188,7 @@ export default function GamePage() {
     const blob = new Blob([JSON.stringify({ selectedHeroId, storyStep, exportedAt: new Date().toISOString() }, null, 2)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `sgxian_save_${Date.now()}.json`;
+    a.download = `three_kingdoms_save_${Date.now()}.json`;
     a.click();
   };
 
@@ -174,7 +214,13 @@ export default function GamePage() {
     }, 1000);
   };
 
-  // ── 載入畫面 ──
+  const selectedUnit = units.find((u) => u.instanceId === selectedUnitId);
+  const selectedUnitIsInAmbush = selectedUnit
+    ? regions.some(
+        (r) => r.type === "AMBUSH" && isPointInPolygon({ x: selectedUnit.x, y: selectedUnit.y }, r.points)
+      )
+    : false;
+
   if (loading) {
     return (
       <div className="fixed inset-0 bg-zinc-950 flex flex-col items-center justify-center gap-4">
@@ -187,37 +233,53 @@ export default function GamePage() {
   }
 
   return (
-    // fixed inset-0 → 全螢幕沉浸式容器，無任何 padding、header
     <div className="fixed inset-0 overflow-hidden bg-black">
-
-      {/* Phaser 全螢幕 Canvas 底層 */}
+      {/* 1. Phaser 全螢幕 Canvas 底層 */}
       {isMounted && (storyStep === "BATTLE" || storyStep === "COMPLETED") && <PhaserGame />}
 
-      {/* 劇情對話（全螢幕覆蓋層） */}
-      {storyStep === "INTRO" && (
-        <StoryDialog onComplete={() => setStoryStep("SUMMON")} />
-      )}
+      {/* 2. 劇情對話 */}
+      {storyStep === "INTRO" && <StoryDialog onComplete={() => setStoryStep("SUMMON")} />}
 
-      {/* 4 選 1 召喚（全螢幕覆蓋層） */}
-      {storyStep === "SUMMON" && (
-        <SummonModal onConfirmSummon={handleConfirmSummon} />
-      )}
+      {/* 3. 4選1名將召喚 */}
+      {storyStep === "SUMMON" && <SummonModal onConfirmSummon={handleConfirmSummon} />}
 
-      {/* 全螢幕戰鬥 In-Game HUD（只在戰鬥時顯示） */}
+      {/* 4. 全螢幕戰鬥 In-Game HUD 覆蓋層 */}
       {(storyStep === "BATTLE" || storyStep === "COMPLETED") && (
-        <InGameHUD
-          onStartBattle={handleStartBattle}
-          onBaitAction={handleBaitAction}
-          onResetDeployment={initBattleUnits}
-          onExecuteAction={handleExecuteAction}
-          onReturnHome={() => router.push("/")}
-          onExportSave={handleExportSave}
-        />
+        <>
+          <InGameHUD
+            onStartBattle={handleStartBattle}
+            onBaitAction={handleBaitAction}
+            onResetDeployment={initBattleUnits}
+            onExecuteAction={handleExecuteAction}
+            onReturnHome={() => router.push("/")}
+            onExportSave={handleExportSave}
+          />
+
+          {/* 5. 底部 GSAP 扇形展開手牌 (布陣階段) */}
+          <FanOutHandCards onPlaceUnit={handlePlaceUnit} />
+
+          {/* 6. 選中卡牌彈出指令輪盤 */}
+          {selectedUnitId && selectedUnit && selectedUnit.faction === "PLAYER" && (
+            <RadialCommandMenu
+              x={selectedUnit.x <= 1 ? selectedUnit.x * window.innerWidth : selectedUnit.x}
+              y={selectedUnit.y <= 1 ? selectedUnit.y * window.innerHeight : selectedUnit.y}
+              isInAmbushRegion={selectedUnitIsInAmbush}
+              onSelectAction={handleExecuteAction}
+              onClose={() => setSelectedUnitId(null)}
+            />
+          )}
+
+          {/* 7. 博德之門3 風格物品欄 (B / TAB 快捷鍵呼出) */}
+          <InventoryModal />
+        </>
       )}
 
-      {/* 戰鬥結算 Modal */}
+      {/* 8. 戰鬥結算 Modal */}
       <BattleResultModal
-        onRestart={() => { resetBattle(); initBattleUnits(); }}
+        onRestart={() => {
+          resetBattle();
+          initBattleUnits();
+        }}
         onReturnHome={() => router.push("/")}
         onExportSave={handleExportSave}
       />
