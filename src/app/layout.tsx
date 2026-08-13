@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "三國修仙 - 回合制布陣策略 Web 遊戲",
-  description: "結合三國名將與修仙神通的回合制布陣策略 Web MVP。水墨寫意畫風 + 現代策略清晰度。",
+  title: "开发模式",
+  description: "三國修仙傳 - 戰術布陣修仙遊戲開發模式",
 };
 
 export default function RootLayout({

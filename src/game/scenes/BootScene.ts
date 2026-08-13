@@ -29,10 +29,10 @@ export class BootScene extends Phaser.Scene {
 
   create() {
     // 執行動態扣圖處理，去除 AI 生成的網格背景
-    removeImageBackground(this, "raw_live2d_protagonist", "live2d_protagonist", 140);
-    removeImageBackground(this, "raw_live2d_huang_zhong", "live2d_huang_zhong", 140);
-    removeImageBackground(this, "raw_live2d_bandit_chief", "live2d_bandit_chief", 140);
-    removeImageBackground(this, "raw_live2d_bandit_thug", "live2d_bandit_thug", 140);
+    removeImageBackground(this, "raw_live2d_protagonist", "live2d_protagonist");
+    removeImageBackground(this, "raw_live2d_huang_zhong", "live2d_huang_zhong");
+    removeImageBackground(this, "raw_live2d_bandit_chief", "live2d_bandit_chief");
+    removeImageBackground(this, "raw_live2d_bandit_thug", "live2d_bandit_thug");
 
     this.scene.start("BattleScene");
   }

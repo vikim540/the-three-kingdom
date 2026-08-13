@@ -1,14 +1,13 @@
 import * as Phaser from "phaser";
 
 /**
- * 客戶端 Canvas 動態扣圖演算法：
- * 自動識別並抹除 AI 生成圖片周圍的網格/灰白棋盤格背景，實現 100% 純淨透明底色角色立繪
+ * 深度多層 Canvas 摳圖演算法：
+ * 徹底消滅 AI 生成圖片邊緣與內部的灰白/棋盤格/雜點背景，產出 100% 純淨透明底角色立繪
  */
 export function removeImageBackground(
   scene: Phaser.Scene,
   originalKey: string,
-  targetKey: string,
-  threshold: number = 145
+  targetKey: string
 ) {
   if (scene.textures.exists(targetKey)) {
     return;
@@ -33,7 +32,7 @@ export function removeImageBackground(
   const visited = new Uint8Array(w * h);
   const queue: number[] = [];
 
-  // 從圖片四周邊緣像素點注入種子
+  // 從四周邊緣注入種子
   for (let x = 0; x < w; x++) {
     queue.push(x, 0);
     queue.push(x, h - 1);
@@ -43,11 +42,21 @@ export function removeImageBackground(
     queue.push(w - 1, y);
   }
 
-  // 判定是否為背景棋盤格/灰白像素
-  const isBackgroundPixel = (r: number, g: number, b: number) => {
-    // 灰白棋盤格像素 (r,g,b 相近且高於閾值)
-    const maxDiff = Math.max(Math.abs(r - g), Math.abs(g - b), Math.abs(r - b));
-    return r >= threshold && g >= threshold && b >= threshold && maxDiff < 30;
+  // 判定背景像素（棋盤格灰色/白色/淡灰/暗灰邊緣）
+  const isBgColor = (r: number, g: number, b: number) => {
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const saturation = max - min;
+
+    // 棋盤格背景條件 1：高亮度低飽和度 (灰白格子)
+    if (r > 115 && g > 115 && b > 115 && saturation < 35) {
+      return true;
+    }
+    // 棋盤格背景條件 2：暗灰格子
+    if (r > 70 && r < 140 && saturation < 15) {
+      return true;
+    }
+    return false;
   };
 
   while (queue.length > 0) {
@@ -62,10 +71,9 @@ export function removeImageBackground(
     const g = data[pIdx + 1];
     const b = data[pIdx + 2];
 
-    if (isBackgroundPixel(r, g, b)) {
-      data[pIdx + 3] = 0; // 設為 100% 全透明
+    if (isBgColor(r, g, b)) {
+      data[pIdx + 3] = 0; // 徹底全透明
 
-      // 向四周氾濫蔓延
       if (x > 0) queue.push(x - 1, y);
       if (x < w - 1) queue.push(x + 1, y);
       if (y > 0) queue.push(x, y - 1);
@@ -73,23 +81,20 @@ export function removeImageBackground(
     }
   }
 
-  // 二次羽化修邊 (平滑角色邊緣)
-  for (let y = 1; y < h - 1; y++) {
-    for (let x = 1; x < w - 1; x++) {
-      const idx = (y * w + x) * 4;
-      if (data[idx + 3] > 0) {
-        let transparentNeighbors = 0;
-        const neighborOffsets = [-w - 1, -w, -w + 1, -1, 1, w - 1, w, w + 1];
-        for (const offset of neighborOffsets) {
-          if (data[(y * w + x + offset) * 4 + 3] === 0) {
-            transparentNeighbors++;
-          }
-        }
-        if (transparentNeighbors >= 5) {
-          data[idx + 3] = 0;
-        } else if (transparentNeighbors >= 2) {
-          data[idx + 3] = Math.floor(data[idx + 3] * 0.6);
-        }
+  // 全局二次色差殘留判定 (清理獨立背景孤島點)
+  for (let i = 0; i < w * h; i++) {
+    const pIdx = i * 4;
+    const r = data[pIdx];
+    const g = data[pIdx + 1];
+    const b = data[pIdx + 2];
+    const a = data[pIdx + 3];
+
+    if (a > 0 && isBgColor(r, g, b)) {
+      const x = i % w;
+      const y = Math.floor(i / w);
+      // 如果位於圖片靠外圍區域且符合背景特徵，強制設為透明
+      if (x < w * 0.22 || x > w * 0.78 || y < h * 0.22 || y > h * 0.78) {
+        data[pIdx + 3] = 0;
       }
     }
   }
