@@ -1,4 +1,5 @@
 import * as Phaser from "phaser";
+import { removeImageBackground } from "@/game/utils/imageChromaKey";
 
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -10,11 +11,11 @@ export class BootScene extends Phaser.Scene {
     this.load.image("battle_bg", "/assets/terrain/battle_bg.webp");
     this.load.image("fog_layer", "/assets/terrain/fog_layer.webp");
 
-    // 載入 2D 高清 Live2D 動態戰鬥角色圖案 (無任何 SVG，完美去背景)
-    this.load.image("live2d_protagonist", "/assets/heroes/protagonist_live2d.webp");
-    this.load.image("live2d_huang_zhong", "/assets/heroes/huang_zhong_live2d.webp");
-    this.load.image("live2d_bandit_chief", "/assets/heroes/bandit_chief_live2d.webp");
-    this.load.image("live2d_bandit_thug", "/assets/heroes/bandit_thug_live2d.webp");
+    // 載入 RAW 戰鬥立繪
+    this.load.image("raw_live2d_protagonist", "/assets/heroes/protagonist_live2d.webp");
+    this.load.image("raw_live2d_huang_zhong", "/assets/heroes/huang_zhong_live2d.webp");
+    this.load.image("raw_live2d_bandit_chief", "/assets/heroes/bandit_chief_live2d.webp");
+    this.load.image("raw_live2d_bandit_thug", "/assets/heroes/bandit_thug_live2d.webp");
 
     // 載入名將卡牌立繪
     this.load.image("hero_protagonist", "/assets/heroes/protagonist.webp");
@@ -27,6 +28,12 @@ export class BootScene extends Phaser.Scene {
   }
 
   create() {
+    // 執行動態扣圖處理，去除 AI 生成的網格背景
+    removeImageBackground(this, "raw_live2d_protagonist", "live2d_protagonist", 140);
+    removeImageBackground(this, "raw_live2d_huang_zhong", "live2d_huang_zhong", 140);
+    removeImageBackground(this, "raw_live2d_bandit_chief", "live2d_bandit_chief", 140);
+    removeImageBackground(this, "raw_live2d_bandit_thug", "live2d_bandit_thug", 140);
+
     this.scene.start("BattleScene");
   }
 }

@@ -4,6 +4,8 @@ import { saveFiles, players, unlockedHeroes } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { generateId } from "@/lib/id";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   try {
     await ensureDbInitialized();
