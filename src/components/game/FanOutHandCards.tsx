@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import gsap from "gsap";
 import { useBattleStore } from "@/stores/useBattleStore";
 import { useDevStore } from "@/stores/useDevStore";
@@ -20,23 +20,20 @@ export const FanOutHandCards: React.FC<FanOutHandCardsProps> = ({ onPlaceUnit })
   // 尚未放置在場景上的手牌單位 (PLAYER 陣營且 x < 0 或 y < 0)
   const unplacedUnits = units.filter((u) => u.faction === "PLAYER" && !u.isDead && (u.x < 0 || u.y < 0));
 
-  const [draggingUnitId, setDraggingUnitId] = useState<string | null>(null);
+  const [draggingUnit, setDraggingUnit] = useState<BattleUnit | null>(null);
   const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
+  const [isHoveringAmbush, setIsHoveringAmbush] = useState<boolean>(false);
 
-  // 1. 登場 GSAP 扇形展開動畫
+  // 1. GSAP 登場與扇形展開動畫
   useEffect(() => {
     if (phase !== "DEPLOYMENT" || unplacedUnits.length === 0) return;
 
     const cards = cardsRef.current.filter(Boolean);
     if (cards.length === 0) return;
 
-    // 清除既有動畫
     gsap.killTweensOf(cards);
-
-    // 初始隱藏於下方
     gsap.set(cards, { y: 120, opacity: 0, scale: 0.8 });
 
-    // GSAP 彈出並扇形展開
     const count = cards.length;
     cards.forEach((card, idx) => {
       const angle = count > 1 ? -12 + (idx / (count - 1)) * 24 : 0;
@@ -48,31 +45,86 @@ export const FanOutHandCards: React.FC<FanOutHandCardsProps> = ({ onPlaceUnit })
         rotation: angle,
         opacity: 1,
         scale: 1,
-        duration: 0.55,
-        delay: idx * 0.06,
-        ease: "back.out(1.5)",
+        duration: 0.45,
+        delay: idx * 0.05,
+        ease: "back.out(1.4)",
       });
     });
   }, [phase, unplacedUnits.length]);
 
+  // 2. 全局 Window 拖拽監聽器 (解決滑鼠離開手牌區域導致無法丟牌放下的 Bug)
+  const handleGlobalMouseMove = useCallback((e: MouseEvent) => {
+    setDragPos({ x: e.clientX, y: e.clientY });
+
+    // 即時檢測是否懸停於草叢伏擊區
+    const normX = e.clientX / window.innerWidth;
+    const normY = e.clientY / window.innerHeight;
+    const inAmbush = regions.some(
+      (r) => r.type === "AMBUSH" && isPointInPolygon({ x: normX, y: normY }, r.points)
+    );
+    setIsHoveringAmbush(inAmbush);
+  }, [regions]);
+
+  const handleGlobalMouseUp = useCallback((e: MouseEvent) => {
+    if (!draggingUnit) return;
+
+    const dropX = e.clientX;
+    const dropY = e.clientY;
+    const normX = Number((dropX / window.innerWidth).toFixed(3));
+    const normY = Number((dropY / window.innerHeight).toFixed(3));
+
+    // 只要放下的位置高於手牌欄 (normY < 0.80)，或者位於戰場多邊形區域內，即判定成功放置！
+    const validRegion = regions.find((r) =>
+      r.type !== "AIR_WALL" && isPointInPolygon({ x: normX, y: normY }, r.points)
+    );
+
+    if (validRegion || normY < 0.80) {
+      const finalY = Math.max(0.18, Math.min(0.85, normY));
+      onPlaceUnit(draggingUnit.instanceId, normX, finalY);
+    }
+
+    // 重置拖拽狀態
+    setDraggingUnit(null);
+    setDragPos(null);
+    setIsHoveringAmbush(false);
+    document.body.style.cursor = "";
+  }, [draggingUnit, regions, onPlaceUnit]);
+
+  useEffect(() => {
+    if (draggingUnit) {
+      window.addEventListener("mousemove", handleGlobalMouseMove);
+      window.addEventListener("mouseup", handleGlobalMouseUp);
+      document.body.style.cursor = "grabbing";
+    } else {
+      window.removeEventListener("mousemove", handleGlobalMouseMove);
+      window.removeEventListener("mouseup", handleGlobalMouseUp);
+      document.body.style.cursor = "";
+    }
+    return () => {
+      window.removeEventListener("mousemove", handleGlobalMouseMove);
+      window.removeEventListener("mouseup", handleGlobalMouseUp);
+      document.body.style.cursor = "";
+    };
+  }, [draggingUnit, handleGlobalMouseMove, handleGlobalMouseUp]);
+
   if (phase !== "DEPLOYMENT") return null;
 
-  // 滑鼠懸停動畫
+  // 滑鼠懸停手牌動效
   const handleMouseEnter = (idx: number, cardEl: HTMLDivElement) => {
-    if (draggingUnitId) return;
+    if (draggingUnit) return;
     gsap.to(cardEl, {
-      y: -28,
-      scale: 1.15,
+      y: -32,
+      scale: 1.18,
       rotation: 0,
       zIndex: 100,
-      boxShadow: "0 0 25px rgba(245, 158, 11, 0.6)",
-      duration: 0.22,
+      boxShadow: "0 0 25px rgba(245, 158, 11, 0.7)",
+      duration: 0.2,
       ease: "power2.out",
     });
   };
 
   const handleMouseLeave = (idx: number, cardEl: HTMLDivElement) => {
-    if (draggingUnitId) return;
+    if (draggingUnit) return;
     const count = unplacedUnits.length;
     const angle = count > 1 ? -12 + (idx / (count - 1)) * 24 : 0;
     const xOffset = count > 1 ? -40 + (idx / (count - 1)) * 80 : 0;
@@ -84,54 +136,21 @@ export const FanOutHandCards: React.FC<FanOutHandCardsProps> = ({ onPlaceUnit })
       scale: 1,
       zIndex: idx + 1,
       boxShadow: "0 4px 12px rgba(0, 0, 0, 0.5)",
-      duration: 0.25,
+      duration: 0.2,
       ease: "power2.out",
     });
   };
 
-  // 拖拽開始
+  // 點擊手牌開始拖拽
   const handleMouseDown = (unit: BattleUnit, e: React.MouseEvent) => {
-    setDraggingUnitId(unit.instanceId);
+    e.preventDefault();
+    setDraggingUnit(unit);
     setSelectedUnitId(unit.instanceId);
     setDragPos({ x: e.clientX, y: e.clientY });
   };
 
-  // 拖拽移動
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!draggingUnitId) return;
-    setDragPos({ x: e.clientX, y: e.clientY });
-  };
-
-  // 拖拽結束
-  const handleMouseUp = () => {
-    if (!draggingUnitId || !dragPos) {
-      setDraggingUnitId(null);
-      setDragPos(null);
-      return;
-    }
-
-    const normX = dragPos.x / window.innerWidth;
-    const normY = dragPos.y / window.innerHeight;
-
-    // 檢查放置目標是否在非空氣牆區域或下半部戰場內
-    const validRegion = regions.find((r) =>
-      r.type !== "AIR_WALL" && isPointInPolygon({ x: normX, y: normY }, r.points)
-    );
-
-    if (validRegion || normY >= 0.3) {
-      onPlaceUnit(draggingUnitId, normX, Math.max(0.25, Math.min(0.92, normY)));
-    }
-
-    setDraggingUnitId(null);
-    setDragPos(null);
-  };
-
   return (
-    <div
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      className="fixed inset-0 pointer-events-none z-30 flex items-end justify-center pb-6 overflow-hidden"
-    >
+    <div className="fixed inset-0 pointer-events-none z-30 flex items-end justify-center pb-6 overflow-hidden select-none">
       {/* 底部扇形手牌容器 */}
       <div
         ref={containerRef}
@@ -149,6 +168,8 @@ export const FanOutHandCards: React.FC<FanOutHandCardsProps> = ({ onPlaceUnit })
             凡: "border-slate-400",
           };
 
+          const isBeingDragged = draggingUnit?.instanceId === unit.instanceId;
+
           return (
             <div
               key={unit.instanceId}
@@ -156,15 +177,15 @@ export const FanOutHandCards: React.FC<FanOutHandCardsProps> = ({ onPlaceUnit })
               onMouseEnter={(e) => handleMouseEnter(idx, e.currentTarget)}
               onMouseLeave={(e) => handleMouseLeave(idx, e.currentTarget)}
               onMouseDown={(e) => handleMouseDown(unit, e)}
-              className={`absolute bottom-0 w-32 h-44 rounded-2xl border-2 bg-stone-950/95 p-2 flex flex-col justify-between cursor-grab active:cursor-grabbing transition-shadow select-none ${
+              className={`absolute bottom-0 w-32 h-44 rounded-2xl border-2 bg-stone-950/95 p-2 flex flex-col justify-between cursor-grab active:cursor-grabbing transition-all select-none ${
                 qualityBorders[quality] || qualityBorders["靈"]
-              }`}
+              } ${isBeingDragged ? "opacity-30 scale-90" : "opacity-100"}`}
               style={{
                 background: "linear-gradient(180deg, rgba(24,19,15,0.98), rgba(9,9,11,0.95))",
                 transformOrigin: "bottom center",
               }}
             >
-              {/* 頂部品質與陣營標籤 */}
+              {/* 頂部陣營與品質標籤 */}
               <div className="flex items-center justify-between text-[10px] font-bold border-b border-stone-800 pb-1">
                 <span className="text-amber-300 font-serif-title">{unit.heroConfig.faction}</span>
                 <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-200 border border-amber-500/30">
@@ -172,7 +193,7 @@ export const FanOutHandCards: React.FC<FanOutHandCardsProps> = ({ onPlaceUnit })
                 </span>
               </div>
 
-              {/* 中央立繪圖片 */}
+              {/* 中央立繪 */}
               <div className="relative flex-1 my-1 overflow-hidden rounded-lg bg-stone-900 flex items-center justify-center border border-stone-800">
                 {/* eslint-disable-next-html-element-fallback */}
                 <img
@@ -187,7 +208,7 @@ export const FanOutHandCards: React.FC<FanOutHandCardsProps> = ({ onPlaceUnit })
                 )}
               </div>
 
-              {/* 底部名字與稱號 */}
+              {/* 底部名稱 */}
               <div className="text-center pt-1 border-t border-stone-800">
                 <div className="text-xs font-bold text-amber-200 font-serif-title">
                   {unit.heroConfig.name}
@@ -201,30 +222,49 @@ export const FanOutHandCards: React.FC<FanOutHandCardsProps> = ({ onPlaceUnit })
         })}
       </div>
 
-      {/* 拖拽跟隨中的放大浮動 Preview 與亮圈提示 */}
-      {draggingUnitId && dragPos && (
-        <div
-          className="fixed pointer-events-none z-50 w-36 h-48 -translate-x-1/2 -translate-y-1/2 rounded-2xl border-2 border-emerald-400 bg-stone-950/95 shadow-[0_0_50px_rgba(34,197,94,0.9)] p-2.5 flex flex-col justify-between scale-110 animate-pulse cursor-grabbing"
-          style={{ left: dragPos.x, top: dragPos.y }}
-        >
-          <div className="flex items-center justify-between text-[11px] font-bold border-b border-emerald-500/40 pb-1 text-emerald-300 font-serif-title">
-            <span>✨ 放置名將</span>
-            <span className="text-[10px] text-amber-300">松手登場</span>
-          </div>
-
-          <div className="text-center my-auto">
-            <div className="text-3xl animate-bounce mb-1">📍</div>
-            <div className="text-xs font-black text-emerald-300 font-serif-title tracking-wider">
-              移至戰術區域放下
-            </div>
-            <div className="text-[10px] text-stone-400 mt-1">
-              (草叢可觸發伏擊形態)
+      {/* 60fps 全局高流暢度拖拽跟隨 Preview + 登場陣芒亮圈 */}
+      {draggingUnit && dragPos && (
+        <>
+          {/* 戰場地面降臨陣芒亮圈 */}
+          <div
+            className={`fixed pointer-events-none z-40 -translate-x-1/2 -translate-y-1/2 w-32 h-14 rounded-full border-2 transition-all duration-150 ${
+              isHoveringAmbush
+                ? "border-emerald-400 bg-emerald-500/30 shadow-[0_0_35px_rgba(34,197,94,0.9)]"
+                : "border-amber-400 bg-amber-500/25 shadow-[0_0_30px_rgba(245,158,11,0.8)]"
+            }`}
+            style={{ left: dragPos.x, top: dragPos.y }}
+          >
+            <div className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-amber-200 animate-pulse">
+              {isHoveringAmbush ? "🌿 草叢伏擊區" : "✨ 松手登場"}
             </div>
           </div>
 
-          {/* 腳下放亮輪盤 */}
-          <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 w-24 h-8 rounded-full border-2 border-emerald-400 bg-emerald-500/30 blur-xs" />
-        </div>
+          {/* 手中跟隨的卡牌 Preview (帶 3D 懸浮傾斜感) */}
+          <div
+            className={`fixed pointer-events-none z-50 w-36 h-48 -translate-x-1/2 -translate-y-full rounded-2xl border-2 bg-stone-950/95 p-2.5 flex flex-col justify-between shadow-2xl transition-transform duration-75 ${
+              isHoveringAmbush ? "border-emerald-400 shadow-[0_0_45px_rgba(34,197,94,0.9)]" : "border-amber-400 shadow-[0_0_40px_rgba(245,158,11,0.8)]"
+            }`}
+            style={{ left: dragPos.x, top: dragPos.y - 10 }}
+          >
+            <div className="flex items-center justify-between text-[11px] font-bold border-b border-amber-500/40 pb-1 text-amber-300 font-serif-title">
+              <span>{draggingUnit.heroConfig.name}</span>
+              <span className="text-[10px] text-emerald-300">拖拽布陣中</span>
+            </div>
+
+            <div className="relative flex-1 my-1 overflow-hidden rounded-lg bg-stone-900 flex items-center justify-center">
+              {/* eslint-disable-next-html-element-fallback */}
+              <img
+                src={draggingUnit.heroConfig.imagePath}
+                alt={draggingUnit.heroConfig.name}
+                className="w-full h-full object-cover object-top"
+              />
+            </div>
+
+            <div className="text-center text-[10px] text-emerald-300 font-bold font-serif-title">
+              {isHoveringAmbush ? "🌿 觸發神箭伏擊！" : "📍 松手直接登場"}
+            </div>
+          </div>
+        </>
       )}
     </div>
   );
