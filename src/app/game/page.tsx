@@ -314,8 +314,12 @@ export default function GamePage() {
     handleStartBattle();
   };
 
-  // 🔴 玩家戰術代理指令即時響應（一次性消費修復 + 雙寫者競態消除）
+  // 🔴 玩家戰術代理指令即時響應（一次性消費 + 玩家接管自動 tick）
   const handleExecuteAction = (action: TacticalActionType) => {
+    // 玩家下指令時，先暫停自動迴圈，避免雙寫競態
+    if (battleIntervalRef.current) clearInterval(battleIntervalRef.current);
+    battleIntervalRef.current = null;
+
     setActiveAction(action);
     const currentUnits = useBattleStore.getState().units;
     const turn = useBattleStore.getState().currentTurn;
@@ -325,10 +329,10 @@ export default function GamePage() {
     result.logs.forEach((l) => addCombatLog(l.text, l.type));
     setUnits(result.updatedUnits);
     emitEvents(result.events);
-    setActiveAction(result.consumedAction); // 🔴 一次性消費：執行完畢後重置為 SELECT
+    setActiveAction(result.consumedAction); // 一次性消費：執行完畢後重置為 SELECT
+    setCurrentTurn(turn + 1);
 
     if (result.isFinished) {
-      if (battleIntervalRef.current) clearInterval(battleIntervalRef.current);
       if (result.outcome) setTacticalOutcome(result.outcome);
       if (result.reward) {
         setReward(result.reward);
@@ -342,6 +346,13 @@ export default function GamePage() {
       } else {
         setPhase("DEFEAT");
       }
+    } else {
+      // 玩家指令完成後，延遲 1.5s 再恢復自動迴圈
+      // 給玩家足夠時間觀察結果再決定下一步
+      const nextTurn = turn + 1;
+      battleIntervalRef.current = setTimeout(() => {
+        restartBattleLoop(nextTurn);
+      }, 1500) as unknown as NodeJS.Timeout;
     }
   };
 
@@ -372,20 +383,27 @@ export default function GamePage() {
   };
 
   // 🟠 回合數同步遞增 (Turn Counter Sync)
-  const runBattleLoop = () => {
-    let turn = 1;
+  // restartBattleLoop：從指定回合恢復自動推進，由玩家指令後延遲呼叫
+  const restartBattleLoop = (fromTurn: number) => {
     if (battleIntervalRef.current) clearInterval(battleIntervalRef.current);
+    let turn = fromTurn;
 
     battleIntervalRef.current = setInterval(() => {
-      const currentUnits = useBattleStore.getState().units;
+      // 若玩家剛下了指令（activeAction !== SELECT），跳過本 tick 避免雙寫
       const currentAction = useBattleStore.getState().activeAction;
-      const result = executeBattleStep(currentUnits, turn, currentAction);
+      if (currentAction !== "SELECT") {
+        setActiveAction("SELECT");
+        turn++;
+        return;
+      }
+
+      const currentUnits = useBattleStore.getState().units;
+      const result = executeBattleStep(currentUnits, turn, "SELECT");
 
       result.logs.forEach((l) => addCombatLog(l.text, l.type));
       setUnits(result.updatedUnits);
       emitEvents(result.events);
-      setActiveAction(result.consumedAction); // 重置一次性指令
-      setCurrentTurn(turn); // 🟠 同步更新 Store 回合數
+      setCurrentTurn(turn);
 
       if (result.isFinished || turn >= 15) {
         if (battleIntervalRef.current) clearInterval(battleIntervalRef.current);
@@ -405,6 +423,10 @@ export default function GamePage() {
       }
       turn++;
     }, 1000);
+  };
+
+  const runBattleLoop = () => {
+    restartBattleLoop(1);
   };
 
   const selectedUnit = units.find((u) => u.instanceId === selectedUnitId);
