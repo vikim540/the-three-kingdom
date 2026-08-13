@@ -14,6 +14,8 @@ import { BattleResultModal } from "@/components/game/BattleResultModal";
 import { SummonModal } from "@/components/game/SummonModal";
 import { IntroNarration } from "@/components/game/IntroNarration";
 import { ARPGActionBar } from "@/components/game/ARPGActionBar";
+import { RoguelikeUpgradeModal } from "@/components/game/RoguelikeUpgradeModal";
+import { EventBus } from "@/game/EventBus";
 import { BattleUnit, HeroConfig, TacticalActionType, StoryStep } from "@/types/game";
 import { STAGE_1_BANDIT } from "@/game/config/stages";
 import { SUMMONABLE_HEROES } from "@/game/config/heroes";
@@ -50,14 +52,23 @@ export default function GamePage() {
 
   const [loading, setLoading] = useState(true);
   const [isDialogueActive, setIsDialogueActive] = useState(true);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const battleIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     setIsMounted(true);
     const handleContextMenu = (e: MouseEvent) => e.preventDefault();
     window.addEventListener("contextmenu", handleContextMenu);
+
+    // 監聽肉鴿升級選卡事件
+    const handleLevelUp = () => {
+      setShowUpgradeModal(true);
+    };
+    EventBus.on("roguelike-level-up", handleLevelUp);
+
     return () => {
       window.removeEventListener("contextmenu", handleContextMenu);
+      EventBus.off("roguelike-level-up", handleLevelUp);
       if (battleIntervalRef.current) clearInterval(battleIntervalRef.current);
     };
   }, []);
@@ -476,6 +487,15 @@ export default function GamePage() {
           />
 
           <ARPGActionBar />
+
+          {showUpgradeModal && (
+            <RoguelikeUpgradeModal
+              onSelectUpgrade={(selectedHero) => {
+                setShowUpgradeModal(false);
+                EventBus.emit("add-team-member", selectedHero);
+              }}
+            />
+          )}
 
           <InventoryModal />
           <BattleResultModal

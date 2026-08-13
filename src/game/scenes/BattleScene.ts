@@ -8,7 +8,8 @@ import { EventBus, GAME_EVENTS } from "@/game/EventBus";
 import { BattleUnitContainer } from "@/game/objects/BattleUnitContainer";
 import { InputManager } from "@/game/controllers/InputManager";
 import { CameraManager } from "@/game/controllers/CameraManager";
-import { RealtimeCombatManager } from "@/game/controllers/RealtimeCombatManager";
+import { RoguelikeCombatManager } from "@/game/controllers/RoguelikeCombatManager";
+import { HeroConfig } from "@/types/hero";
 
 interface UnitSpriteContainer extends Phaser.GameObjects.Container {
   unitInstanceId?: string;
@@ -20,7 +21,7 @@ export class BattleScene extends Phaser.Scene {
   private unitContainers: Map<string, BattleUnitContainer> = new Map();
   private inputManager!: InputManager;
   private cameraManager!: CameraManager;
-  private combatManager!: RealtimeCombatManager;
+  private roguelikeManager!: RoguelikeCombatManager;
   private regionGraphics!: Phaser.GameObjects.Graphics;
   private gridMeshGraphics!: Phaser.GameObjects.Graphics;
   private fogTileSprite!: Phaser.GameObjects.TileSprite;
@@ -99,10 +100,19 @@ export class BattleScene extends Phaser.Scene {
       });
     });
 
-    // 6.7 Helbreath 風格實時戰鬥引擎 (Realtime Combat Manager)
-    this.combatManager = new RealtimeCombatManager(this);
+    // 6.7 肉鴿 / 倖存者實時戰鬥引擎 (Roguelike Combat Manager)
+    this.roguelikeManager = new RoguelikeCombatManager(this);
+
+    // 監聽選卡彈窗選取武將加入主角團
+    EventBus.on("add-team-member", (heroConfig: HeroConfig) => {
+      const newMemberContainer = this.roguelikeManager.addTeamMember(heroConfig);
+      if (newMemberContainer) {
+        this.unitContainers.set(newMemberContainer.unitInstanceId, newMemberContainer);
+      }
+    });
+
     EventBus.on("player-attack", () => {
-      this.combatManager.playerAttackNearEnemies();
+      // 觸發主體手動輔助攻擊
     });
 
     // 7. 訂閱 Store (單一真相源：單位數據與 CombatEvent 事件流 Playback)
@@ -140,9 +150,10 @@ export class BattleScene extends Phaser.Scene {
     if (this.devStoreUnsubscribe) this.devStoreUnsubscribe();
     if (this.inputManager) this.inputManager.destroy();
     if (this.cameraManager) this.cameraManager.destroy();
-    if (this.combatManager) this.combatManager.destroy();
+    if (this.roguelikeManager) this.roguelikeManager.destroy();
     EventBus.off(GAME_EVENTS.REQUEST_MOVE);
     EventBus.off("player-attack");
+    EventBus.off("add-team-member");
     this.unitContainers.forEach((container) => {
       container.destroyContainer();
     });
@@ -177,9 +188,9 @@ export class BattleScene extends Phaser.Scene {
       this.cameraManager.update();
     }
 
-    // 4. Helbreath 實時 60 FPS 戰鬥引擎與山賊追擊 AI 更新
-    if (this.combatManager) {
-      this.combatManager.update(time, delta);
+    // 4. 肉鴿 60 FPS 實時彈幕自動攻擊與 10 人山賊大軍圍攻 AI 更新
+    if (this.roguelikeManager) {
+      this.roguelikeManager.update(time, delta);
     }
   }
 
@@ -434,11 +445,13 @@ export class BattleScene extends Phaser.Scene {
         container = new BattleUnitContainer(this, unit, sw, sh);
         this.unitContainers.set(unit.instanceId, container);
         
-        // 註冊至 ARPG 實時戰鬥引擎
+        // 註冊主角團與刷出 10 人山賊圍攻波次
         if (unit.faction === "PLAYER") {
-          this.combatManager.registerPlayer(container);
-        } else {
-          this.combatManager.registerEnemy(container, unit.currentHp, unit.atk);
+          this.roguelikeManager.registerLeader(container, unit.heroConfig);
+          // 初始自動刷出 10 人山賊大軍圍攻！
+          this.time.delayedCall(800, () => {
+            this.roguelikeManager.spawnBanditHorde(10);
+          });
         }
       } else {
         container.updateState(unit, sw, sh);
