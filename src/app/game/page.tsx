@@ -13,6 +13,7 @@ import { BanditDialogueModal } from "@/components/game/BanditDialogueModal";
 import { InventoryModal } from "@/components/game/InventoryModal";
 import { BattleResultModal } from "@/components/game/BattleResultModal";
 import { SummonModal } from "@/components/game/SummonModal";
+import { IntroNarration } from "@/components/game/IntroNarration";
 import { BattleUnit, HeroConfig, TacticalActionType, StoryStep } from "@/types/game";
 import { STAGE_1_BANDIT } from "@/game/config/stages";
 import { SUMMONABLE_HEROES } from "@/game/config/heroes";
@@ -422,6 +423,10 @@ export default function GamePage() {
   return (
     <main className="relative w-screen h-screen overflow-hidden bg-zinc-950 select-none">
       <PhaserGame />
+
+      {storyStep === "INTRO" && (
+        <IntroNarration onComplete={() => setStoryStep("SUMMON")} />
+      )}
 
       {storyStep === "SUMMON" && <SummonModal onConfirmSummon={handleConfirmSummon} />}
 

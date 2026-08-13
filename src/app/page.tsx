@@ -32,7 +32,7 @@ export default function MainMenuPage() {
     } catch (err) {
       console.error("重置存檔失敗:", err);
     }
-    setStoryStep("SUMMON");
+    setStoryStep("INTRO");
     router.push("/game");
   };
 

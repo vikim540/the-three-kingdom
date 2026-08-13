@@ -1,8 +1,10 @@
 import * as Phaser from "phaser";
 
 /**
- * 深度多層 Canvas 摳圖演算法：
- * 徹底消滅 AI 生成圖片邊緣與內部的灰白/棋盤格/雜點背景，產出 100% 純淨透明底角色立繪
+ * 精準低侵入性 Canvas 摳圖演算法：
+ * 專門針對 AI 生成的棋盤格背景（rgba 灰白相間），使用邊緣種子泛洪填充法。
+ * 僅消滅從四週連通的背景色塊，內部任何像素（含白色衣物、白鬍鬚）均不受影響。
+ * 關鍵修復：大幅收窄 isBgColor 閾值，確保角色不被誤抹除。
  */
 export function removeImageBackground(
   scene: Phaser.Scene,
@@ -42,23 +44,30 @@ export function removeImageBackground(
     queue.push(w - 1, y);
   }
 
-  // 判定背景像素（棋盤格灰色/白色/淡灰/暗灰邊緣）
+  /**
+   * 🔴 修復：大幅收窄 isBgColor 閾值，只消滅真正的棋盤格灰白格子
+   * 舊版：r > 115 && g > 115 && b > 115 && saturation < 35  ← 太寬，白袍白鬚被誤刪
+   * 新版：只有非常高亮度（>195）且幾乎無飽和度（<18）的像素才算背景
+   * 棋盤格淺色格：RGB 約 (230,230,230)；棋盤格深色格：RGB 約 (180,180,180)
+   * 角色皮膚/衣物最低飽和度都 > 30，不會被誤刪
+   */
   const isBgColor = (r: number, g: number, b: number) => {
     const max = Math.max(r, g, b);
     const min = Math.min(r, g, b);
     const saturation = max - min;
 
-    // 棋盤格背景條件 1：高亮度低飽和度 (灰白格子)
-    if (r > 115 && g > 115 && b > 115 && saturation < 35) {
+    // 極高亮度、極低飽和度：棋盤淺灰/白格
+    if (r > 195 && g > 195 && b > 195 && saturation < 18) {
       return true;
     }
-    // 棋盤格背景條件 2：暗灰格子
-    if (r > 70 && r < 140 && saturation < 15) {
+    // 中等亮度、極低飽和度：棋盤深灰格
+    if (r > 155 && r < 200 && g > 155 && g < 200 && b > 155 && b < 200 && saturation < 12) {
       return true;
     }
     return false;
   };
 
+  // BFS 邊緣泛洪填充：只從邊緣連通的背景色才清除
   while (queue.length > 0) {
     const y = queue.pop()!;
     const x = queue.pop()!;
@@ -72,30 +81,12 @@ export function removeImageBackground(
     const b = data[pIdx + 2];
 
     if (isBgColor(r, g, b)) {
-      data[pIdx + 3] = 0; // 徹底全透明
+      data[pIdx + 3] = 0; // 全透明
 
       if (x > 0) queue.push(x - 1, y);
       if (x < w - 1) queue.push(x + 1, y);
       if (y > 0) queue.push(x, y - 1);
       if (y < h - 1) queue.push(x, y + 1);
-    }
-  }
-
-  // 全局二次色差殘留判定 (清理獨立背景孤島點)
-  for (let i = 0; i < w * h; i++) {
-    const pIdx = i * 4;
-    const r = data[pIdx];
-    const g = data[pIdx + 1];
-    const b = data[pIdx + 2];
-    const a = data[pIdx + 3];
-
-    if (a > 0 && isBgColor(r, g, b)) {
-      const x = i % w;
-      const y = Math.floor(i / w);
-      // 如果位於圖片靠外圍區域且符合背景特徵，強制設為透明
-      if (x < w * 0.22 || x > w * 0.78 || y < h * 0.22 || y > h * 0.78) {
-        data[pIdx + 3] = 0;
-      }
     }
   }
 
