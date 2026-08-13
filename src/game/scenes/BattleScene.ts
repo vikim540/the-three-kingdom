@@ -7,6 +7,7 @@ import { REGION_COLORS } from "@/types/region";
 import { EventBus, GAME_EVENTS } from "@/game/EventBus";
 import { BattleUnitContainer } from "@/game/objects/BattleUnitContainer";
 import { InputManager } from "@/game/controllers/InputManager";
+import { CameraManager } from "@/game/controllers/CameraManager";
 
 interface UnitSpriteContainer extends Phaser.GameObjects.Container {
   unitInstanceId?: string;
@@ -17,6 +18,7 @@ interface UnitSpriteContainer extends Phaser.GameObjects.Container {
 export class BattleScene extends Phaser.Scene {
   private unitContainers: Map<string, BattleUnitContainer> = new Map();
   private inputManager!: InputManager;
+  private cameraManager!: CameraManager;
   private regionGraphics!: Phaser.GameObjects.Graphics;
   private gridMeshGraphics!: Phaser.GameObjects.Graphics;
   private fogTileSprite!: Phaser.GameObjects.TileSprite;
@@ -61,11 +63,37 @@ export class BattleScene extends Phaser.Scene {
 
     // 6.5 Helbreath 風格輸入控制器與事件監聽
     this.inputManager = new InputManager(this);
+    
+    // 6.6 Helbreath 大世界地圖攝影機跟隨系統 (Camera Manager)
+    const mapWidth = 2400;
+    const mapHeight = 1800;
+    this.physics.world?.setBounds(0, 0, mapWidth, mapHeight);
+    
+    this.cameraManager = new CameraManager({
+      scene: this,
+      getFollowTarget: () => {
+        let playerContainer: BattleUnitContainer | undefined;
+        this.unitContainers.forEach((container) => {
+          if (container.isPlayer) playerContainer = container;
+        });
+        return playerContainer ? { x: playerContainer.x, y: playerContainer.y } : undefined;
+      },
+    });
+    this.cameraManager.setWorldBounds(mapWidth, mapHeight);
+
+    // 滾輪控制視角縮放
+    this.input.on("wheel", (_pointer: Phaser.Input.Pointer, _gameObjects: unknown, _deltaX: number, deltaY: number) => {
+      const currentZoom = this.cameras.main.zoom;
+      const newZoom = deltaY > 0 ? currentZoom - 0.1 : currentZoom + 0.1;
+      this.cameraManager.setZoom(newZoom);
+    });
+
     EventBus.on(GAME_EVENTS.REQUEST_MOVE, (targetPos: { x: number; y: number }) => {
-      // 尋找玩家主角 Container 並指示移動
+      // 轉換成大世界世界座標
+      const worldPoint = this.cameras.main.getWorldPoint(targetPos.x, targetPos.y);
       this.unitContainers.forEach((container) => {
         if (container.isPlayer) {
-          container.moveToTarget(targetPos.x, targetPos.y);
+          container.moveToTarget(worldPoint.x, worldPoint.y);
         }
       });
     });
@@ -104,6 +132,7 @@ export class BattleScene extends Phaser.Scene {
     if (this.storeUnsubscribe) this.storeUnsubscribe();
     if (this.devStoreUnsubscribe) this.devStoreUnsubscribe();
     if (this.inputManager) this.inputManager.destroy();
+    if (this.cameraManager) this.cameraManager.destroy();
     EventBus.off(GAME_EVENTS.REQUEST_MOVE);
     this.unitContainers.forEach((container) => {
       container.destroyContainer();
@@ -133,15 +162,20 @@ export class BattleScene extends Phaser.Scene {
         });
       }
     }
+
+    // 3. Helbreath 攝影機實時跟隨主角更新
+    if (this.cameraManager) {
+      this.cameraManager.update();
+    }
   }
 
   private addBackground() {
-    const w = this.scale.width;
-    const h = this.scale.height;
+    const mapW = 2400;
+    const mapH = 1800;
     const texKey = this.textures.exists("forest_path_bg") ? "forest_path_bg" : "battle_bg";
-    const bg = this.add.image(w / 2, h / 2, texKey);
-    bg.setDisplaySize(w, h);
-    bg.setAlpha(0.95);
+    // 建立平鋪重複の大世界卷軸地圖 (Helbreath World Tilemap)
+    const bgTile = this.add.tileSprite(mapW / 2, mapH / 2, mapW, mapH, texKey);
+    bgTile.setAlpha(0.95);
   }
 
   private drawBushOverlay(sw: number, sh: number) {

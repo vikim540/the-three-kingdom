@@ -172,17 +172,18 @@ export class BattleUnitContainer extends Phaser.GameObjects.Container {
     this.x += dx * moveDist;
     this.y += dy * moveDist;
 
-    // 邊界卡位限制
-    const sw = this.scene.scale.width;
-    const sh = this.scene.scale.height;
-    this.x = Phaser.Math.Clamp(this.x, sw * 0.1, sw * 0.9);
-    this.y = Phaser.Math.Clamp(this.y, sh * 0.2, sh * 0.85);
+    // 2400x1800 修仙大世界地圖邊界卡位限制 (Helbreath World Bounds)
+    const mapW = 2400;
+    const mapH = 1800;
+    this.x = Phaser.Math.Clamp(this.x, 80, mapW - 80);
+    this.y = Phaser.Math.Clamp(this.y, 80, mapH - 80);
 
     // 面向轉向
     if (dx < 0) this.charSprite.setFlipX(true);
     else if (dx > 0) this.charSprite.setFlipX(false);
 
     // 動態重算透視比例與 Depth
+    const sh = this.scene.scale.height;
     const normY = this.y / sh;
     this.baseScale = 0.7 + normY * 0.45;
     this.setScale(this.baseScale);
