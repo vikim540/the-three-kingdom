@@ -2,12 +2,13 @@ import * as Phaser from "phaser";
 import { useBattleStore } from "@/stores/useBattleStore";
 import { useDevStore } from "@/stores/useDevStore";
 import { BattleUnit } from "@/types/game";
-import { getPerspectiveScale, REGION_COLORS } from "@/types/region";
+import { gridToScreen, screenToGrid } from "@/game/utils/gridCoords";
+import { REGION_COLORS } from "@/types/region";
 
 interface UnitSpriteContainer extends Phaser.GameObjects.Container {
   unitInstanceId?: string;
-  normX?: number;
-  normY?: number;
+  gridCol?: number;
+  gridRow?: number;
 }
 
 export class BattleScene extends Phaser.Scene {
@@ -16,6 +17,8 @@ export class BattleScene extends Phaser.Scene {
   private fogTileSprite!: Phaser.GameObjects.TileSprite;
   private bushGraphics!: Phaser.GameObjects.Graphics;
   private tooltipText?: Phaser.GameObjects.Text;
+  private storeUnsubscribe?: () => void;
+  private devStoreUnsubscribe?: () => void;
 
   constructor() {
     super({ key: "BattleScene" });
@@ -28,17 +31,17 @@ export class BattleScene extends Phaser.Scene {
     // 1. 山谷全螢幕背景
     this.addBackground();
 
-    // 2. 右側古樹草叢美術資材
+    // 2. 右側古樹草叢伏擊區素材
     this.drawBushOverlay(sw, sh);
 
     // 3. 氣若柔絲 局部飄霧
     this.addDriftingFogLayer();
 
-    // 4. 多邊形邊界圖層
+    // 4. 多邊形圖層 (開發者模式)
     this.regionGraphics = this.add.graphics();
     this.drawPolygonsOverlay();
 
-    // 5. 提示浮層文字
+    // 5. 提示文字
     this.tooltipText = this.add.text(sw / 2, 30, "", {
       fontSize: "13px",
       color: "#fef08a",
@@ -47,25 +50,34 @@ export class BattleScene extends Phaser.Scene {
       padding: { x: 12, y: 6 },
     }).setOrigin(0.5).setDepth(200).setVisible(false);
 
-    // 6. 訂閱 Store
+    // 6. 訂閱 Store (保持單一真相源 Playback 演出)
     this.syncUnitsFromStore();
 
-    useBattleStore.subscribe((state, prevState) => {
+    this.storeUnsubscribe = useBattleStore.subscribe((state) => {
       this.updateUnitsVisual(state.units);
-
-      // 當階段切換至 BATTLE_IN_PROGRESS，觸發戰術武將技演繹！
-      if (state.phase === "BATTLE_IN_PROGRESS" && prevState.phase === "DEPLOYMENT") {
-        this.executeTacticalCombatSequence(state.units);
-      }
     });
 
-    useDevStore.subscribe(() => {
+    this.devStoreUnsubscribe = useDevStore.subscribe(() => {
       this.drawPolygonsOverlay();
     });
 
-    this.scale.on("resize", () => {
-      this.scene.restart();
+    // 7. 響應式 Resize（使用 scale.on("resize") 動態重算，嚴禁 scene.restart）
+    this.scale.on("resize", (gameSize: Phaser.Structs.Size) => {
+      this.repositionElements(gameSize.width, gameSize.height);
     });
+
+    // 8. 生命週期銷毀時對稱取消訂閱
+    this.events.once("shutdown", this.cleanup, this);
+    this.events.once("destroy", this.cleanup, this);
+  }
+
+  private cleanup() {
+    if (this.storeUnsubscribe) this.storeUnsubscribe();
+    if (this.devStoreUnsubscribe) this.devStoreUnsubscribe();
+    this.unitContainers.forEach((container) => {
+      this.tweens.killTweensOf(container);
+    });
+    this.unitContainers.clear();
   }
 
   update(_time: number, delta: number) {
@@ -85,9 +97,10 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private drawBushOverlay(sw: number, sh: number) {
+    if (this.bushGraphics) this.bushGraphics.destroy();
     this.bushGraphics = this.add.graphics();
     const bx = sw * 0.72;
-    const by = sh * 0.45;
+    const by = sh * 0.48;
 
     this.bushGraphics.fillStyle(0x064e3b, 0.75);
     this.bushGraphics.fillEllipse(bx, by, 180, 90);
@@ -100,7 +113,7 @@ export class BattleScene extends Phaser.Scene {
     this.bushGraphics.fillEllipse(bx - 10, by - 20, 100, 50);
     this.bushGraphics.fillEllipse(bx + 15, by - 15, 90, 45);
 
-    const bushLabel = this.add.text(bx, by - 45, "🌿 側翼古樹草叢 (黃忠神箭伏擊點)", {
+    const bushLabel = this.add.text(bx, by - 45, "🌿 側翼古樹草叢 (黃忠神箭伏擊位)", {
       fontSize: "12px",
       color: "#6ee7b7",
       fontStyle: "bold",
@@ -172,6 +185,9 @@ export class BattleScene extends Phaser.Scene {
     this.updateUnitsVisual(useBattleStore.getState().units);
   }
 
+  /**
+   * 根據 Store 單一真相源整數網格座標 (col, row) 更新與渲染 2D 戰鬥單位
+   */
   private updateUnitsVisual(units: BattleUnit[]) {
     const sw = this.scale.width;
     const sh = this.scale.height;
@@ -179,15 +195,15 @@ export class BattleScene extends Phaser.Scene {
     units.forEach((unit) => {
       let container = this.unitContainers.get(unit.instanceId);
 
+      // 尚未放置 (x < 0 或 y < 0) 不渲染
       if (unit.x < 0 || unit.y < 0) {
         if (container) container.setVisible(false);
         return;
       }
 
-      const px = unit.x <= 1.0 ? unit.x * sw : unit.x;
-      const py = unit.y <= 1.0 ? unit.y * sh : unit.y;
-      const normY = py / sh;
-      const perspectiveScale = getPerspectiveScale(normY);
+      // 使用統一網格轉換庫 gridToScreen 得到螢幕像素 (px, py)
+      const { px, py, normY } = gridToScreen(unit.x, unit.y, sw, sh);
+      const perspectiveScale = 0.7 + normY * 0.45;
 
       if (!container) {
         container = this.add.container(px, py) as UnitSpriteContainer;
@@ -198,8 +214,8 @@ export class BattleScene extends Phaser.Scene {
         this.buildLive2DCharacter(container, unit, perspectiveScale);
       }
 
-      container.normX = px / sw;
-      container.normY = normY;
+      container.gridCol = unit.x;
+      container.gridRow = unit.y;
       container.depth = Math.floor(py);
 
       this.tweens.add({
@@ -226,16 +242,20 @@ export class BattleScene extends Phaser.Scene {
   }
 
   /**
-   * 構建角色 (包含 Hover 懸停放大提示、手勢切換與光環暗示)
+   * 構建角色 (自動清除舊 Tween 徹底治理記憶體洩漏，整合 Hover 1.18x 放大暗示)
    */
   private buildLive2DCharacter(container: UnitSpriteContainer, unit: BattleUnit, baseScale: number) {
+    // 釋放舊容器與動畫 Tween，徹底消滅洩漏
+    this.tweens.killTweensOf(container);
     container.removeAll(true);
 
     const isPlayer = unit.faction === "PLAYER";
     const heroId = unit.heroConfig.id;
-    const isAmbush = unit.statusEffects.includes("AMBUSH");
 
-    // 1. 光環底盤 (Hover 時發光提示)
+    // 判斷是否處於草叢伏擊 (col >= 2 且 row >= 4)
+    const isAmbush = (unit.x >= 2 && unit.y >= 4 && unit.y <= 8) || unit.statusEffects.includes("AMBUSH");
+
+    // 1. 光環底圖
     const auraColor = isPlayer
       ? heroId === "hero_huang_zhong"
         ? 0x10b981
@@ -245,13 +265,12 @@ export class BattleScene extends Phaser.Scene {
       : 0xef4444;
 
     const baseDisk = this.add.graphics();
-    baseDisk.setName("baseDisk");
     baseDisk.fillStyle(auraColor, isAmbush ? 0.65 : 0.35);
     baseDisk.fillEllipse(0, 36, 72, 28);
     baseDisk.lineStyle(2.5, auraColor, 1);
     baseDisk.strokeEllipse(0, 36, 72, 28);
 
-    // 2. 高清透明底角色
+    // 2. 高清 100% 透明底角色立繪
     let live2dKey = "live2d_protagonist";
     if (heroId === "hero_huang_zhong") live2dKey = "live2d_huang_zhong";
     else if (heroId === "enemy_bandit_chief") live2dKey = "live2d_bandit_chief";
@@ -286,7 +305,7 @@ export class BattleScene extends Phaser.Scene {
       isPlayer ? 0x22c55e : 0xef4444, 1
     ).setOrigin(0, 0.5);
 
-    const nameText = this.add.text(0, 52, unit.heroConfig.name, {
+    const nameText = this.add.text(0, 52, `${unit.heroConfig.name} (${unit.x},${unit.y})`, {
       fontSize: "11px",
       color: isPlayer ? "#fef08a" : "#fca5a5",
       fontStyle: "bold",
@@ -297,7 +316,7 @@ export class BattleScene extends Phaser.Scene {
     const children: Phaser.GameObjects.GameObject[] = [baseDisk, charSprite, hpBg, hpFill, nameText];
 
     if (isAmbush) {
-      const ambushTag = this.add.text(0, -126, "🌿 半隱身 (百步穿楊伏擊)", {
+      const ambushTag = this.add.text(0, -126, "🌿 半隱身 (神箭伏擊)", {
         fontSize: "10px",
         color: "#6ee7b7",
         fontStyle: "bold",
@@ -309,7 +328,7 @@ export class BattleScene extends Phaser.Scene {
 
     container.add(children);
 
-    // 4. ⭐ Hover 懸停放大提示與手勢切換 (寓意暗示用戶可拖拽)
+    // 4. ⭐ Hover 懸停 1.18 倍放大暗示與手勢切換
     container.setInteractive(
       new Phaser.Geom.Rectangle(-50, -110, 100, 160),
       Phaser.Geom.Rectangle.Contains
@@ -320,28 +339,26 @@ export class BattleScene extends Phaser.Scene {
         this.input.setDefaultCursor("grab");
         if (this.tooltipText) {
           this.tooltipText
-            .setText(`🖱️ [${unit.heroConfig.name}] 按住可拖拽調整戰術站位`)
+            .setText(`🖱️ [${unit.heroConfig.name}] 網格(${unit.x},${unit.y}) - 按住拖拽調整戰術站位`)
             .setVisible(true);
         }
       } else {
         this.input.setDefaultCursor("pointer");
         if (this.tooltipText) {
           this.tooltipText
-            .setText(`⚔️ [${unit.heroConfig.name}] HP:${unit.currentHp}/${unit.maxHp} ATK:${unit.atk}`)
+            .setText(`⚔️ [${unit.heroConfig.name}] 網格(${unit.x},${unit.y}) HP:${unit.currentHp}/${unit.maxHp}`)
             .setVisible(true);
         }
       }
 
-      // ⭐ 懸停放大 1.18 倍，並閃爍黃金邊框暗示可互動
       this.tweens.add({
         targets: container,
         scaleX: baseScale * 1.18,
         scaleY: baseScale * 1.18,
-        duration: 150,
+        duration: 140,
         ease: "Power2.out",
       });
 
-      // 增強底光
       baseDisk.lineStyle(3.5, 0xf59e0b, 1);
       baseDisk.strokeEllipse(0, 36, 76, 32);
     });
@@ -354,7 +371,7 @@ export class BattleScene extends Phaser.Scene {
         targets: container,
         scaleX: baseScale,
         scaleY: baseScale,
-        duration: 150,
+        duration: 140,
         ease: "Power2.out",
       });
 
@@ -389,12 +406,13 @@ export class BattleScene extends Phaser.Scene {
         if (useBattleStore.getState().phase === "DEPLOYMENT") {
           const sw = this.scale.width;
           const sh = this.scale.height;
-          const normX = Number((container.x / sw).toFixed(3));
-          const normY = Number((container.y / sh).toFixed(3));
+
+          // 使用網格轉換庫將拖拽終點像素 safe-map 轉換為 4x10 整數網格
+          const gridPos = screenToGrid(container.x, container.y, sw, sh);
 
           useBattleStore.getState().setUnits(
             useBattleStore.getState().units.map((u) =>
-              u.instanceId === unit.instanceId ? { ...u, x: normX, y: normY } : u
+              u.instanceId === unit.instanceId ? { ...u, x: gridPos.col, y: gridPos.row } : u
             )
           );
         }
@@ -403,121 +421,11 @@ export class BattleScene extends Phaser.Scene {
   }
 
   /**
-   * 執行非線性戰術武將技演繹 (黃忠伏擊 / 夏侯惇援護)
+   * 視窗 Resize 時的重算佈局（嚴禁調用 scene.restart()）
    */
-  private executeTacticalCombatSequence(units: BattleUnit[]) {
-    const huangZhong = units.find((u) => u.heroConfig.id === "hero_huang_zhong" && u.x >= 0);
-    const xiahouDun = units.find((u) => u.heroConfig.id === "hero_xiahou_dun" && u.x >= 0);
-    const banditChief = units.find((u) => u.heroConfig.id === "enemy_bandit_chief" && !u.isDead);
-
-    // 路線 A：黃忠草叢伏擊一擊必殺
-    const isHuangAmbush = huangZhong?.statusEffects.includes("AMBUSH") || (huangZhong && huangZhong.x >= 0.60);
-
-    if (huangZhong && banditChief && isHuangAmbush) {
-      const hzContainer = this.unitContainers.get(huangZhong.instanceId);
-      const chiefContainer = this.unitContainers.get(banditChief.instanceId);
-
-      if (hzContainer && chiefContainer) {
-        hzContainer.setAlpha(1);
-
-        const skillBanner = this.add.text(hzContainer.x, hzContainer.y - 140, "🏹【百步穿楊 · 一擊必殺！】", {
-          fontSize: "20px",
-          color: "#fef08a",
-          fontStyle: "bold",
-          stroke: "#b45309",
-          strokeThickness: 5,
-        }).setOrigin(0.5);
-
-        this.tweens.add({
-          targets: skillBanner,
-          y: hzContainer.y - 180,
-          scale: 1.2,
-          duration: 600,
-          yoyo: true,
-        });
-
-        const arrow = this.add.graphics();
-        arrow.lineStyle(4, 0xf59e0b, 1);
-        arrow.lineBetween(hzContainer.x, hzContainer.y - 40, chiefContainer.x, chiefContainer.y - 40);
-
-        this.tweens.add({
-          targets: arrow,
-          alpha: 0,
-          duration: 800,
-          onComplete: () => arrow.destroy(),
-        });
-
-        this.time.delayedCall(500, () => {
-          const critText = this.add.text(chiefContainer.x, chiefContainer.y - 100, "⚡ 9999 一擊必殺！", {
-            fontSize: "24px",
-            color: "#ef4444",
-            fontStyle: "bold",
-            stroke: "#000000",
-            strokeThickness: 6,
-          }).setOrigin(0.5);
-
-          this.tweens.add({
-            targets: critText,
-            y: chiefContainer.y - 150,
-            alpha: 0,
-            duration: 1200,
-          });
-
-          useBattleStore.getState().setUnits(
-            useBattleStore.getState().units.map((u) =>
-              u.instanceId === banditChief.instanceId ? { ...u, currentHp: 0, isDead: true } : u
-            )
-          );
-
-          useBattleStore.getState().addCombatLog("🏹 老將黃忠於草叢施展【百步穿楊】，一箭貫穿山賊首領【獨眼寨主】！", "skill");
-
-          // 敵眾慌動潰逃
-          this.time.delayedCall(800, () => {
-            units.forEach((u) => {
-              if (u.faction === "ENEMY" && u.instanceId !== banditChief.instanceId) {
-                const enemyContainer = this.unitContainers.get(u.instanceId);
-                if (enemyContainer) {
-                  const panicMsg = this.add.text(enemyContainer.x, enemyContainer.y - 80, "😱 大寨主死啦！快逃啊！", {
-                    fontSize: "12px",
-                    color: "#fca5a5",
-                    fontStyle: "bold",
-                    stroke: "#7f1d1d",
-                    strokeThickness: 3,
-                  }).setOrigin(0.5);
-
-                  this.tweens.add({
-                    targets: [enemyContainer, panicMsg],
-                    x: enemyContainer.x + 400,
-                    alpha: 0,
-                    duration: 1200,
-                    ease: "Power2.in",
-                  });
-                }
-              }
-            });
-
-            useBattleStore.getState().addCombatLog("😱 敵眾見大寨主被秒殺，精神潰散，拋頭鼠竄逃離戰場！", "victory");
-
-            this.time.delayedCall(1600, () => {
-              useBattleStore.getState().setPhase("VICTORY");
-            });
-          });
-        });
-        return;
-      }
-    }
-
-    // 路線 B：夏侯惇正面鐵血援護防禦推進
-    if (xiahouDun && banditChief) {
-      useBattleStore.getState().addCombatLog("🛡️ 夏侯惇發動【鐵血援護】，獲得 40% 傷害豁免並率全隊反擊！", "skill");
-      this.time.delayedCall(1200, () => {
-        useBattleStore.getState().setUnits(
-          useBattleStore.getState().units.map((u) =>
-            u.faction === "ENEMY" ? { ...u, currentHp: 0, isDead: true } : u
-          )
-        );
-        useBattleStore.getState().setPhase("VICTORY");
-      });
-    }
+  private repositionElements(sw: number, sh: number) {
+    this.drawBushOverlay(sw, sh);
+    this.drawPolygonsOverlay();
+    this.updateUnitsVisual(useBattleStore.getState().units);
   }
 }

@@ -3,17 +3,17 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import gsap from "gsap";
 import { useBattleStore } from "@/stores/useBattleStore";
-import { useDevStore } from "@/stores/useDevStore";
-import { isPointInPolygon } from "@/types/region";
 import { BattleUnit } from "@/types/game";
+import { screenToGrid } from "@/game/utils/gridCoords";
+import { STAGE_1_BANDIT } from "@/game/config/stages";
+import { isUnitInBush } from "@/game/systems/AmbushSystem";
 
 interface FanOutHandCardsProps {
-  onPlaceUnit: (unitInstanceId: string, normX: number, normY: number) => void;
+  onPlaceUnit: (unitInstanceId: string, col: number, row: number) => void;
 }
 
 export const FanOutHandCards: React.FC<FanOutHandCardsProps> = ({ onPlaceUnit }) => {
   const { phase, units, setSelectedUnitId } = useBattleStore();
-  const { regions } = useDevStore();
   const containerRef = useRef<HTMLDivElement>(null);
   const cardsRef = useRef<(HTMLDivElement | null)[]>([]);
 
@@ -56,39 +56,28 @@ export const FanOutHandCards: React.FC<FanOutHandCardsProps> = ({ onPlaceUnit })
   const handleGlobalMouseMove = useCallback((e: MouseEvent) => {
     setDragPos({ x: e.clientX, y: e.clientY });
 
-    // 即時檢測是否懸停於草叢伏擊區
-    const normX = e.clientX / window.innerWidth;
-    const normY = e.clientY / window.innerHeight;
-    const inAmbush = regions.some(
-      (r) => r.type === "AMBUSH" && isPointInPolygon({ x: normX, y: normY }, r.points)
-    );
+    // 使用 screenToGrid 純函數安全算得整數網格 (col, row)
+    const { col, row } = screenToGrid(e.clientX, e.clientY, window.innerWidth, window.innerHeight);
+    const inAmbush = isUnitInBush({ x: col, y: row }, STAGE_1_BANDIT.tiles);
     setIsHoveringAmbush(inAmbush);
-  }, [regions]);
+  }, []);
 
   const handleGlobalMouseUp = useCallback((e: MouseEvent) => {
     if (!draggingUnit) return;
 
-    const dropX = e.clientX;
-    const dropY = e.clientY;
-    const normX = Number((dropX / window.innerWidth).toFixed(3));
-    const normY = Number((dropY / window.innerHeight).toFixed(3));
+    // 將滑鼠放下的螢幕像素精確 safe-map 轉換為 4x10 整數網格 (col, row)
+    const { col, row } = screenToGrid(e.clientX, e.clientY, window.innerWidth, window.innerHeight);
 
-    // 只要放下的位置高於手牌欄 (normY < 0.80)，或者位於戰場多邊形區域內，即判定成功放置！
-    const validRegion = regions.find((r) =>
-      r.type !== "AIR_WALL" && isPointInPolygon({ x: normX, y: normY }, r.points)
-    );
-
-    if (validRegion || normY < 0.80) {
-      const finalY = Math.max(0.18, Math.min(0.85, normY));
-      onPlaceUnit(draggingUnit.instanceId, normX, finalY);
+    // 只要放置於戰場網格中下部 (row >= 2)，即判定成功登場！
+    if (row >= 2) {
+      onPlaceUnit(draggingUnit.instanceId, col, row);
     }
 
-    // 重置拖拽狀態
     setDraggingUnit(null);
     setDragPos(null);
     setIsHoveringAmbush(false);
     document.body.style.cursor = "";
-  }, [draggingUnit, regions, onPlaceUnit]);
+  }, [draggingUnit, onPlaceUnit]);
 
   useEffect(() => {
     if (draggingUnit) {
@@ -141,7 +130,6 @@ export const FanOutHandCards: React.FC<FanOutHandCardsProps> = ({ onPlaceUnit })
     });
   };
 
-  // 點擊手牌開始拖拽
   const handleMouseDown = (unit: BattleUnit, e: React.MouseEvent) => {
     e.preventDefault();
     setDraggingUnit(unit);
@@ -185,7 +173,6 @@ export const FanOutHandCards: React.FC<FanOutHandCardsProps> = ({ onPlaceUnit })
                 transformOrigin: "bottom center",
               }}
             >
-              {/* 頂部陣營與品質標籤 */}
               <div className="flex items-center justify-between text-[10px] font-bold border-b border-stone-800 pb-1">
                 <span className="text-amber-300 font-serif-title">{unit.heroConfig.faction}</span>
                 <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-200 border border-amber-500/30">
@@ -193,7 +180,6 @@ export const FanOutHandCards: React.FC<FanOutHandCardsProps> = ({ onPlaceUnit })
                 </span>
               </div>
 
-              {/* 中央立繪 */}
               <div className="relative flex-1 my-1 overflow-hidden rounded-lg bg-stone-900 flex items-center justify-center border border-stone-800">
                 {/* eslint-disable-next-html-element-fallback */}
                 <img
@@ -208,7 +194,6 @@ export const FanOutHandCards: React.FC<FanOutHandCardsProps> = ({ onPlaceUnit })
                 )}
               </div>
 
-              {/* 底部名稱 */}
               <div className="text-center pt-1 border-t border-stone-800">
                 <div className="text-xs font-bold text-amber-200 font-serif-title">
                   {unit.heroConfig.name}
@@ -225,7 +210,6 @@ export const FanOutHandCards: React.FC<FanOutHandCardsProps> = ({ onPlaceUnit })
       {/* 60fps 全局高流暢度拖拽跟隨 Preview + 登場陣芒亮圈 */}
       {draggingUnit && dragPos && (
         <>
-          {/* 戰場地面降臨陣芒亮圈 */}
           <div
             className={`fixed pointer-events-none z-40 -translate-x-1/2 -translate-y-1/2 w-32 h-14 rounded-full border-2 transition-all duration-150 ${
               isHoveringAmbush
@@ -235,11 +219,10 @@ export const FanOutHandCards: React.FC<FanOutHandCardsProps> = ({ onPlaceUnit })
             style={{ left: dragPos.x, top: dragPos.y }}
           >
             <div className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-amber-200 animate-pulse">
-              {isHoveringAmbush ? "🌿 草叢伏擊區" : "✨ 松手登場"}
+              {isHoveringAmbush ? "🌿 草叢伏擊網格" : "✨ 松手登場"}
             </div>
           </div>
 
-          {/* 手中跟隨的卡牌 Preview (帶 3D 懸浮傾斜感) */}
           <div
             className={`fixed pointer-events-none z-50 w-36 h-48 -translate-x-1/2 -translate-y-full rounded-2xl border-2 bg-stone-950/95 p-2.5 flex flex-col justify-between shadow-2xl transition-transform duration-75 ${
               isHoveringAmbush ? "border-emerald-400 shadow-[0_0_45px_rgba(34,197,94,0.9)]" : "border-amber-400 shadow-[0_0_40px_rgba(245,158,11,0.8)]"
