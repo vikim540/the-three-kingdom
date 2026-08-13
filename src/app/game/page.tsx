@@ -36,6 +36,7 @@ export default function GamePage() {
     setUnits,
     setSelectedUnitId,
     setActiveAction,
+    setCurrentTurn,
     addCombatLog,
     emitEvents,
     setReward,
@@ -60,6 +61,7 @@ export default function GamePage() {
     };
   }, []);
 
+  // 🟠 裝備屬性真實融入戰鬥數值 (Equipment Stats Integration)
   const buildUnit = (
     id: string,
     heroId: string,
@@ -101,18 +103,44 @@ export default function GamePage() {
 
     const cfg = allHeroes.find((h) => h.id === heroId) || SUMMONABLE_HEROES[0];
 
+    // 讀取背包裝備屬性加成 (武器、防具、飾品、功法)
+    let bonusAtk = 0;
+    let bonusDef = 0;
+    let bonusHp = 0;
+    let bonusSpeed = 0;
+    let bonusMove = 0;
+
+    const heroEquip = heroInventories[heroId]?.equipment;
+    if (heroEquip) {
+      Object.values(heroEquip).forEach((item) => {
+        if (item?.stats) {
+          if (item.stats.atk) bonusAtk += item.stats.atk;
+          if (item.stats.def) bonusDef += item.stats.def;
+          if (item.stats.hp) bonusHp += item.stats.hp;
+          if (item.stats.speed) bonusSpeed += item.stats.speed;
+          if (item.stats.moveRange) bonusMove += item.stats.moveRange;
+        }
+      });
+    }
+
+    const finalHp = cfg.baseStats.hp + bonusHp;
+    const finalAtk = cfg.baseStats.atk + bonusAtk;
+    const finalDef = cfg.baseStats.def + bonusDef;
+    const finalSpeed = cfg.baseStats.speed + bonusSpeed;
+    const finalMove = cfg.baseStats.moveRange + bonusMove;
+
     return {
       instanceId: id,
       heroConfig: cfg,
       faction,
       x: col,
       y: row,
-      currentHp: cfg.baseStats.hp,
-      maxHp: cfg.baseStats.hp,
-      atk: cfg.baseStats.atk,
-      def: cfg.baseStats.def,
-      speed: cfg.baseStats.speed,
-      moveRange: cfg.baseStats.moveRange,
+      currentHp: finalHp,
+      maxHp: finalHp,
+      atk: finalAtk,
+      def: finalDef,
+      speed: finalSpeed,
+      moveRange: finalMove,
       attackRange: cfg.baseStats.attackRange,
       statusEffects: [],
       hasActedThisTurn: false,
@@ -126,7 +154,6 @@ export default function GamePage() {
       buildUnit("u_protagonist", "hero_protagonist", "PLAYER", -1, -1),
       buildUnit(`u_${heroId}`, heroId, "PLAYER", -1, -1),
     ];
-    // 敵人精確使用 STAGE_1_BANDIT 網格整數座標 (col, row)
     const enemyUnits = STAGE_1_BANDIT.enemies.map((e, i) =>
       buildUnit(`enemy_${i}`, e.heroId, "ENEMY", e.x, e.y)
     );
@@ -134,22 +161,40 @@ export default function GamePage() {
     setPhase("DEPLOYMENT");
   }, [selectedHeroId, setUnits, setPhase]);
 
-  // 載入與還原 SQLite 真存檔 (Restore Full Game State)
+  // 🟠 真跨會話存盤還原 (Restore Full Game State from SQLite)
   useEffect(() => {
     fetch("/api/save")
       .then((r) => r.json())
       .then((data) => {
         if (data.success && data.save) {
           if (data.save.selectedHeroId) setSelectedHeroId(data.save.selectedHeroId);
-          if (data.save.storyStep) setStoryStep(data.save.storyStep as StoryStep);
+          const loadedStep = data.save.storyStep === "COMPLETED" ? "BATTLE" : (data.save.storyStep as StoryStep);
+          if (loadedStep) setStoryStep(loadedStep);
+
+          // 若存檔包含真實單位網格與 HP，精確還原原地續上！
+          if (data.gameData?.units && Array.isArray(data.gameData.units) && data.gameData.units.length > 0) {
+            const restoredUnits: BattleUnit[] = data.gameData.units.map((u: any) => {
+              const base = buildUnit(u.instanceId, u.heroId, u.heroId.startsWith("enemy") ? "ENEMY" : "PLAYER", u.x, u.y);
+              return {
+                ...base,
+                currentHp: u.hp !== undefined ? u.hp : base.currentHp,
+                maxHp: u.maxHp !== undefined ? u.maxHp : base.maxHp,
+                isDead: u.isDead !== undefined ? u.isDead : u.hp === 0,
+              };
+            });
+            setUnits(restoredUnits);
+            setIsDialogueActive(false);
+          }
         }
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [setSelectedHeroId, setStoryStep]);
+  }, [setSelectedHeroId, setStoryStep, setUnits]);
 
   useEffect(() => {
-    if (storyStep === "BATTLE" && units.length === 0) initBattleUnits();
+    if ((storyStep === "BATTLE" || storyStep === "COMPLETED") && units.length === 0) {
+      initBattleUnits();
+    }
   }, [storyStep, units.length, initBattleUnits]);
 
   // 放置手牌單位到 4x10 整數網格 (col, row)
@@ -178,7 +223,7 @@ export default function GamePage() {
     );
   };
 
-  // ⭐ 一鍵推薦佈陣：自動將主角放在 (1, 7)，名將放在的最佳戰術網格 (如黃忠草叢伏擊 3, 5)
+  // 一鍵推薦佈陣：自動將主角放在 (1, 7)，黃忠草叢伏擊 (3, 5)
   const handleQuickAutoDeploy = () => {
     setUnits(
       units.map((u) => {
@@ -250,12 +295,15 @@ export default function GamePage() {
   const handleConfirmSummon = async (hero: HeroConfig) => {
     setSelectedHeroId(hero.id);
     setStoryStep("BATTLE");
+    setIsDialogueActive(true);
+    initBattleUnits();
     await saveGameState("BATTLE");
   };
 
   const handleStartBattle = () => {
     if (battleIntervalRef.current) clearInterval(battleIntervalRef.current);
     setPhase("BATTLE_IN_PROGRESS");
+    setCurrentTurn(1);
     addCombatLog("⚔️ 兩軍交鋒！黑風山谷遭遇戰正式開始！", "info");
     runBattleLoop();
   };
@@ -265,22 +313,29 @@ export default function GamePage() {
     handleStartBattle();
   };
 
-  // 玩家代理指令即時響應模擬引擎 (Player Agency)
+  // 🔴 玩家戰術代理指令即時響應（一次性消費修復 + 雙寫者競態消除）
   const handleExecuteAction = (action: TacticalActionType) => {
     setActiveAction(action);
     const currentUnits = useBattleStore.getState().units;
-    const result = executeBattleStep(currentUnits, currentTurn, action);
+    const turn = useBattleStore.getState().currentTurn;
+
+    const result = executeBattleStep(currentUnits, turn, action);
 
     result.logs.forEach((l) => addCombatLog(l.text, l.type));
     setUnits(result.updatedUnits);
     emitEvents(result.events);
+    setActiveAction(result.consumedAction); // 🔴 一次性消費：執行完畢後重置為 SELECT
 
     if (result.isFinished) {
       if (battleIntervalRef.current) clearInterval(battleIntervalRef.current);
       if (result.outcome) setTacticalOutcome(result.outcome);
       if (result.reward) {
         setReward(result.reward);
-        setPhase("VICTORY");
+        if (result.outcome === "RETREAT") {
+          setPhase("RETREAT");
+        } else {
+          setPhase("VICTORY");
+        }
         setStoryStep("COMPLETED");
         saveGameState("COMPLETED");
       } else {
@@ -315,6 +370,7 @@ export default function GamePage() {
     a.click();
   };
 
+  // 🟠 回合數同步遞增 (Turn Counter Sync)
   const runBattleLoop = () => {
     let turn = 1;
     if (battleIntervalRef.current) clearInterval(battleIntervalRef.current);
@@ -327,13 +383,19 @@ export default function GamePage() {
       result.logs.forEach((l) => addCombatLog(l.text, l.type));
       setUnits(result.updatedUnits);
       emitEvents(result.events);
+      setActiveAction(result.consumedAction); // 重置一次性指令
+      setCurrentTurn(turn); // 🟠 同步更新 Store 回合數
 
       if (result.isFinished || turn >= 15) {
         if (battleIntervalRef.current) clearInterval(battleIntervalRef.current);
         if (result.outcome) setTacticalOutcome(result.outcome);
         if (result.reward) {
           setReward(result.reward);
-          setPhase("VICTORY");
+          if (result.outcome === "RETREAT") {
+            setPhase("RETREAT");
+          } else {
+            setPhase("VICTORY");
+          }
           setStoryStep("COMPLETED");
           saveGameState("COMPLETED");
         } else {
@@ -355,17 +417,19 @@ export default function GamePage() {
     );
   }
 
+  const showBattleUI = storyStep === "BATTLE" || storyStep === "COMPLETED";
+
   return (
     <main className="relative w-screen h-screen overflow-hidden bg-zinc-950 select-none">
       <PhaserGame />
 
       {storyStep === "SUMMON" && <SummonModal onConfirmSummon={handleConfirmSummon} />}
 
-      {storyStep === "BATTLE" && isDialogueActive && (
+      {showBattleUI && isDialogueActive && (
         <BanditDialogueModal onConfirmChoice={handleBanditChoice} onDismiss={() => setIsDialogueActive(false)} />
       )}
 
-      {storyStep === "BATTLE" && !isDialogueActive && (
+      {showBattleUI && !isDialogueActive && (
         <>
           <InGameHUD
             onStartBattle={handleStartBattle}

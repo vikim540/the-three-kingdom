@@ -7,8 +7,9 @@ export interface TurnStepResult {
   events: CombatEvent[];
   updatedUnits: BattleUnit[];
   isFinished: boolean;
-  outcome: "AMBUSH" | "GUARD" | "STANDARD" | null;
+  outcome: "AMBUSH" | "GUARD" | "STANDARD" | "RETREAT" | null;
   reward: BattleReward | null;
+  consumedAction: TacticalActionType; // 一次性指令消費修復
 }
 
 /**
@@ -24,40 +25,89 @@ export function executeBattleStep(
   const events: CombatEvent[] = [];
   let units = currentUnits.map((u) => ({ ...u, statusEffects: [...u.statusEffects] }));
   const tiles = STAGE_1_BANDIT.tiles;
+  let nextAction: TacticalActionType = "SELECT"; // 預設指令一次性消費後重置
 
   const generateId = () => Math.random().toString(36).substring(2, 9);
 
-  // 0. 玩家戰術代理指令接入 (Player Agency)
+  // 🔴 0. 玩家戰術代理指令一次性消費 (Player Agency)
   if (activeAction === "ITEM") {
     const wounded = units.find((u) => u.faction === "PLAYER" && !u.isDead && u.currentHp < u.maxHp);
-    if (wounded) {
+    const targetUnit = wounded || units.find((u) => u.faction === "PLAYER" && !u.isDead);
+    if (targetUnit) {
       const healAmount = 50;
-      wounded.currentHp = Math.min(wounded.maxHp, wounded.currentHp + healAmount);
+      targetUnit.currentHp = Math.min(targetUnit.maxHp, targetUnit.currentHp + healAmount);
       logs.push({
-        text: `🧪 玩家對【${wounded.heroConfig.name}】使用【靈芝仙草】，恢復 ${healAmount} 點生命！`,
+        text: `🧪 玩家使用【靈芝仙草】，對【${targetUnit.heroConfig.name}】恢復 ${healAmount} 點生命！`,
         type: "skill",
       });
       events.push({
         id: generateId(),
         type: "SKILL_TRIGGERED",
-        unitId: wounded.instanceId,
+        unitId: targetUnit.instanceId,
         skillName: "靈芝仙草治癒",
         description: `恢復 ${healAmount} 點生命`,
       });
     }
   } else if (activeAction === "FLEE") {
-    const playerUnit = units.find((u) => u.faction === "PLAYER" && !u.isDead);
-    if (playerUnit && playerUnit.y >= 7) {
-      logs.push({ text: "🏃‍♂️ 我方戰術撤退成功！全員安全離場！", type: "info" });
-      events.push({ id: generateId(), type: "BATTLE_VICTORY", description: "戰術撤退" });
-      return {
-        logs,
-        events,
-        updatedUnits: units,
-        isFinished: true,
-        outcome: "STANDARD",
-        reward: null,
-      };
+    logs.push({ text: "🏃‍♂️ 我方全隊執行戰術撤退！安全撤離黑風山谷！", type: "info" });
+    events.push({ id: generateId(), type: "BATTLE_RETREAT", description: "戰術安全撤退" });
+
+    const retreatReward: BattleReward = {
+      lootType: "RETREAT_SAFE",
+      title: "戰術撤退全吉捷報",
+      description: "全隊安全撤離戰場，保留精純修仙戰力與基礎靈石！",
+      items: [{ name: "保命靈丹", count: 1, quality: "靈", icon: "💊" }],
+      spiritStones: 50,
+      exp: 50,
+    };
+
+    return {
+      logs,
+      events,
+      updatedUnits: units,
+      isFinished: true,
+      outcome: "RETREAT",
+      reward: retreatReward,
+      consumedAction: "SELECT",
+    };
+  } else if (activeAction === "SKILL") {
+    // 🟠 玩家主動點擊【武將特技】按鈕分支
+    const primaryHero = units.find((u) => u.faction === "PLAYER" && !u.isDead && u.heroConfig.id !== "hero_protagonist") || units.find((u) => u.faction === "PLAYER" && !u.isDead);
+    const primaryTarget = units.find((u) => u.faction === "ENEMY" && !u.isDead);
+
+    if (primaryHero && primaryTarget) {
+      const heroId = primaryHero.heroConfig.id;
+      let skillName = "修仙劍氣";
+      let damage = Math.floor(primaryHero.atk * 1.5);
+
+      if (heroId === "hero_huang_zhong") {
+        skillName = "落日神箭";
+        damage = Math.floor(primaryHero.atk * 1.8);
+      } else if (heroId === "hero_zhao_yun") {
+        skillName = "七進七出";
+        damage = Math.floor(primaryHero.atk * 1.6);
+      } else if (heroId === "hero_guo_jia") {
+        skillName = "玄冰符陣";
+        damage = Math.floor(primaryHero.atk * 1.4);
+        primaryTarget.statusEffects.push("FROZEN");
+      } else if (heroId === "hero_xiahou_dun") {
+        skillName = "鐵血咆哮";
+        primaryHero.def = Math.floor(primaryHero.def * 1.5);
+      }
+
+      const newHp = Math.max(0, primaryTarget.currentHp - damage);
+      const isDead = newHp === 0;
+
+      units = units.map((u) => (u.instanceId === primaryTarget.instanceId ? { ...u, currentHp: newHp, isDead } : u));
+
+      logs.push({
+        text: `✨ 【${primaryHero.heroConfig.name}】發動主動特技【${skillName}】，轟擊【${primaryTarget.heroConfig.name}】造成 ${damage} 點爆破傷害！${isDead ? "（目標倒下！）" : ""}`,
+        type: "skill",
+      });
+
+      events.push({ id: generateId(), type: "SKILL_TRIGGERED", unitId: primaryHero.instanceId, skillName });
+      events.push({ id: generateId(), type: "ATTACK_HIT", attackerId: primaryHero.instanceId, targetId: primaryTarget.instanceId, damage, isCrit: true });
+      if (isDead) events.push({ id: generateId(), type: "UNIT_DIED", unitId: primaryTarget.instanceId });
     }
   }
 
@@ -92,13 +142,9 @@ export function executeBattleStep(
       isCrit: true,
     });
 
-    // 擊殺首領
-    units = units.map((u) =>
-      u.instanceId === chiefUnit.instanceId ? { ...u, currentHp: 0, isDead: true } : u
-    );
+    units = units.map((u) => (u.instanceId === chiefUnit.instanceId ? { ...u, currentHp: 0, isDead: true } : u));
     events.push({ id: generateId(), type: "UNIT_DIED", unitId: chiefUnit.instanceId });
 
-    // 敵眾慌亂潰逃
     const fleeingIds: string[] = [];
     units = units.map((u) => {
       if (u.faction === "ENEMY" && !u.isDead) {
@@ -110,16 +156,8 @@ export function executeBattleStep(
 
     events.push({ id: generateId(), type: "PANIC_FLEE", fleeUnitIds: fleeingIds });
 
-    logs.push({
-      text: `😱 首領伏誅！剩餘黑風嘍囉嚇得魂飛魄散，拋頭鼠竄逃離戰場！`,
-      type: "rout",
-    });
-
-    logs.push({
-      text: `🏆 戰鬥勝利！黃忠神弓伏擊大獲全勝！`,
-      type: "victory",
-    });
-
+    logs.push({ text: `😱 首領伏誅！剩餘黑風嘍囉嚇得魂飛魄散，拋頭鼠竄逃離戰場！`, type: "rout" });
+    logs.push({ text: `🏆 戰鬥勝利！黃忠神弓伏擊大獲全勝！`, type: "victory" });
     events.push({ id: generateId(), type: "BATTLE_VICTORY", description: "草叢伏擊大獲全勝" });
 
     const reward: BattleReward = {
@@ -141,6 +179,7 @@ export function executeBattleStep(
       isFinished: true,
       outcome: "AMBUSH",
       reward,
+      consumedAction: "SELECT",
     };
   }
 
@@ -172,9 +211,8 @@ export function executeBattleStep(
     const currentAttacker = units.find((u) => u.instanceId === attacker.instanceId);
     if (!currentAttacker || currentAttacker.isDead) continue;
 
-    // 若被冰封，跳過本回合
     if (currentAttacker.statusEffects.includes("FROZEN")) {
-      logs.push({ text: "❄️ 【" + currentAttacker.heroConfig.name + "】陷入冰封，無法行動！", type: "info" });
+      logs.push({ text: `❄️ 【${currentAttacker.heroConfig.name}】陷入冰封，無法行動！`, type: "info" });
       currentAttacker.statusEffects = currentAttacker.statusEffects.filter((s) => s !== "FROZEN");
       continue;
     }
@@ -182,51 +220,9 @@ export function executeBattleStep(
     const enemies = units.filter((u) => u.faction !== currentAttacker.faction && !u.isDead);
     if (enemies.length === 0) break;
 
-    enemies.sort(
-      (a, b) => getManhattanDistance(currentAttacker, a) - getManhattanDistance(currentAttacker, b)
-    );
+    enemies.sort((a, b) => getManhattanDistance(currentAttacker, a) - getManhattanDistance(currentAttacker, b));
     const target = enemies[0];
     const dist = getManhattanDistance(currentAttacker, target);
-
-    // 名將技能特化：趙雲 (PIERCE_CHARGE) & 郭嘉 (FREEZE_CONTROL)
-    const heroId = currentAttacker.heroConfig.id;
-
-    if (heroId === "hero_zhao_yun" && dist <= currentAttacker.moveRange + 1) {
-      // 趙雲七進七出穿透
-      logs.push({ text: `⚡ 趙雲發動【七進七出】：長槍穿透敵陣，無視 50% 防禦！`, type: "skill" });
-      events.push({ id: generateId(), type: "SKILL_TRIGGERED", unitId: currentAttacker.instanceId, skillName: "七進七出" });
-
-      const piercedDef = Math.floor(target.def * 0.5);
-      const rawDamage = Math.max(10, Math.floor(currentAttacker.atk * 1.3 - piercedDef));
-      const newHp = Math.max(0, target.currentHp - rawDamage);
-      const isDead = newHp === 0;
-
-      units = units.map((u) => (u.instanceId === target.instanceId ? { ...u, currentHp: newHp, isDead } : u));
-      events.push({ id: generateId(), type: "ATTACK_HIT", attackerId: currentAttacker.instanceId, targetId: target.instanceId, damage: rawDamage, isCrit: true });
-      if (isDead) events.push({ id: generateId(), type: "UNIT_DIED", unitId: target.instanceId });
-
-      logs.push({ text: `⚔️ 趙雲槍芒刺穿【${target.heroConfig.name}】，造成 ${rawDamage} 點穿透暴擊傷害！${isDead ? "（目標倒下！）" : ""}`, type: "damage" });
-      continue;
-    }
-
-    if (heroId === "hero_guo_jia" && dist <= currentAttacker.attackRange + 2) {
-      // 郭嘉奇謀禁錮
-      logs.push({ text: `📜 郭嘉發動【奇謀禁錮】：玄冰符陣封印【${target.heroConfig.name}】！`, type: "skill" });
-      events.push({ id: generateId(), type: "SKILL_TRIGGERED", unitId: currentAttacker.instanceId, skillName: "奇謀禁錮" });
-
-      const rawDamage = Math.max(12, Math.floor(currentAttacker.atk * 1.1 - target.def * 0.3));
-      const newHp = Math.max(0, target.currentHp - rawDamage);
-      const isDead = newHp === 0;
-
-      units = units.map((u) =>
-        u.instanceId === target.instanceId
-          ? { ...u, currentHp: newHp, isDead, statusEffects: isDead ? u.statusEffects : [...u.statusEffects, "FROZEN"] }
-          : u
-      );
-      events.push({ id: generateId(), type: "ATTACK_HIT", attackerId: currentAttacker.instanceId, targetId: target.instanceId, damage: rawDamage });
-      if (isDead) events.push({ id: generateId(), type: "UNIT_DIED", unitId: target.instanceId });
-      continue;
-    }
 
     // 常規移動與攻擊
     if (dist > currentAttacker.attackRange) {
@@ -234,23 +230,30 @@ export function executeBattleStep(
       const dy = Math.sign(target.y - currentAttacker.y);
       const fromX = currentAttacker.x;
       const fromY = currentAttacker.y;
-      const newX = currentAttacker.x + (Math.abs(target.x - currentAttacker.x) > Math.abs(target.y - currentAttacker.y) ? dx : 0);
-      const newY = currentAttacker.y + (Math.abs(target.y - currentAttacker.y) >= Math.abs(target.x - currentAttacker.x) ? dy : 0);
+      let newX = currentAttacker.x + (Math.abs(target.x - currentAttacker.x) > Math.abs(target.y - currentAttacker.y) ? dx : 0);
+      let newY = currentAttacker.y + (Math.abs(target.y - currentAttacker.y) >= Math.abs(target.x - currentAttacker.x) ? dy : 0);
+
+      // 檢查 OBSTACLE 障礙地形
+      const destTile = tiles.find((t) => t.x === newX && t.y === newY);
+      if (destTile?.terrain === "OBSTACLE") {
+        newX = fromX;
+        newY = fromY;
+      }
 
       units = units.map((u) => (u.instanceId === currentAttacker.instanceId ? { ...u, x: newX, y: newY } : u));
-      events.push({ id: generateId(), type: "UNIT_MOVED", unitId: currentAttacker.instanceId, fromX, fromY, toX: newX, toY: newY });
-      logs.push({ text: `🚶 ${currentAttacker.heroConfig.name} 推進至網格 (${newX}, ${newY})。`, type: "info" });
+      if (newX !== fromX || newY !== fromY) {
+        events.push({ id: generateId(), type: "UNIT_MOVED", unitId: currentAttacker.instanceId, fromX, fromY, toX: newX, toY: newY });
+        logs.push({ text: `🚶 ${currentAttacker.heroConfig.name} 推進至網格 (${newX}, ${newY})。`, type: "info" });
+      }
     } else {
-      // 計算地形與夏侯惇護甲加成
       let effectiveDef = target.def;
       if (target.heroConfig.id === "hero_xiahou_dun" && isXiahouGuarded) {
-        effectiveDef = Math.floor(effectiveDef * 1.66); // 40% 傷害豁免
+        effectiveDef = Math.floor(effectiveDef * 1.66);
       }
       if (isUnitInBush(target, tiles)) {
-        effectiveDef = Math.floor(effectiveDef * 1.2); // 草叢 +20% 防禦加成
+        effectiveDef = Math.floor(effectiveDef * 1.2);
       }
 
-      // 正態方差 (0.9 ~ 1.1) 與暴擊判定
       const isCrit = Math.random() < currentAttacker.speed * 0.02;
       const variance = 0.9 + Math.random() * 0.2;
       const rawDamage = Math.max(5, Math.floor((currentAttacker.atk * (isCrit ? 1.5 : 1) - effectiveDef * 0.5) * variance));
@@ -299,6 +302,7 @@ export function executeBattleStep(
       isFinished: true,
       outcome: isXiahouGuarded ? "GUARD" : "STANDARD",
       reward,
+      consumedAction: "SELECT",
     };
   }
 
@@ -311,6 +315,7 @@ export function executeBattleStep(
       isFinished: true,
       outcome: null,
       reward: null,
+      consumedAction: "SELECT",
     };
   }
 
@@ -321,5 +326,6 @@ export function executeBattleStep(
     isFinished: false,
     outcome: null,
     reward: null,
+    consumedAction: nextAction,
   };
 }

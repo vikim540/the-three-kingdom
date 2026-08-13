@@ -10,17 +10,18 @@ interface BattleState {
   combatLogs: CombatLogMessage[];
   lastEvents: CombatEvent[];
   reward: BattleReward | null;
-  tacticalOutcome: "AMBUSH" | "GUARD" | "STANDARD" | null;
+  tacticalOutcome: "AMBUSH" | "GUARD" | "STANDARD" | "RETREAT" | null;
 
   setPhase: (phase: BattlePhase) => void;
   setUnits: (units: BattleUnit[]) => void;
   updateUnitPosition: (instanceId: string, x: number, y: number) => void;
   setSelectedUnitId: (id: string | null) => void;
   setActiveAction: (action: TacticalActionType) => void;
+  setCurrentTurn: (turn: number) => void;
   addCombatLog: (text: string, type?: CombatLogMessage["type"]) => void;
   emitEvents: (events: CombatEvent[]) => void;
   setReward: (reward: BattleReward | null) => void;
-  setTacticalOutcome: (outcome: "AMBUSH" | "GUARD" | "STANDARD") => void;
+  setTacticalOutcome: (outcome: "AMBUSH" | "GUARD" | "STANDARD" | "RETREAT") => void;
   resetBattle: () => void;
 }
 
@@ -46,6 +47,7 @@ export const useBattleStore = create<BattleState>((set, get) => ({
 
   setSelectedUnitId: (id) => set({ selectedUnitId: id }),
   setActiveAction: (action) => set({ activeAction: action }),
+  setCurrentTurn: (currentTurn) => set({ currentTurn }),
 
   addCombatLog: (text, type = "info") => {
     const newLog: CombatLogMessage = {

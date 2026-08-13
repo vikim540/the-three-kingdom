@@ -10,6 +10,7 @@ export default function MainMenuPage() {
   const { setStoryStep, resetGame } = useGameStore();
   const [hasSave, setHasSave] = useState<boolean>(false);
   const [showGuide, setShowGuide] = useState<boolean>(false);
+  const [isStarting, setIsStarting] = useState<boolean>(false);
 
   useEffect(() => {
     // 檢查是否有歷史修仙存檔
@@ -23,15 +24,20 @@ export default function MainMenuPage() {
       .catch((err) => console.error("檢查存檔時發生錯誤:", err));
   }, []);
 
-  const handleStartNewGame = () => {
+  const handleStartNewGame = async () => {
+    setIsStarting(true);
     resetGame();
-    setStoryStep("INTRO");
-    fetch("/api/save", { method: "DELETE" }).catch(console.error);
-    window.location.href = "/game";
+    try {
+      await fetch("/api/save", { method: "DELETE" });
+    } catch (err) {
+      console.error("重置存檔失敗:", err);
+    }
+    setStoryStep("SUMMON");
+    router.push("/game");
   };
 
   const handleContinueGame = () => {
-    window.location.href = "/game";
+    router.push("/game");
   };
 
   const handleImportSave = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -49,7 +55,7 @@ export default function MainMenuPage() {
             body: JSON.stringify(jsonContent),
           });
           alert("✅ 存檔匯入成功！即將進入修仙戰場...");
-          window.location.href = "/game";
+          router.push("/game");
         } else {
           alert("❌ 存檔格式無效");
         }
@@ -85,10 +91,15 @@ export default function MainMenuPage() {
         <div className="flex flex-col gap-4 max-w-sm mx-auto mb-8">
           <button
             onClick={handleStartNewGame}
-            className="w-full py-4 rounded-xl font-bold font-serif-title text-zinc-950 bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 shadow-[0_0_25px_rgba(245,158,11,0.5)] hover:shadow-[0_0_35px_rgba(245,158,11,0.8)] hover:scale-105 active:scale-95 transition-all duration-200 flex items-center justify-center gap-2 text-base tracking-widest"
+            disabled={isStarting}
+            className="w-full py-4 rounded-xl font-bold font-serif-title text-zinc-950 bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 shadow-[0_0_25px_rgba(245,158,11,0.5)] hover:shadow-[0_0_35px_rgba(245,158,11,0.8)] hover:scale-105 active:scale-95 transition-all duration-200 flex items-center justify-center gap-2 text-base tracking-widest disabled:opacity-50"
           >
-            <Play className="w-5 h-5 fill-current" />
-            <span>踏入修仙界</span>
+            {isStarting ? (
+              <div className="w-5 h-5 border-2 border-zinc-950 border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <Play className="w-5 h-5 fill-current" />
+            )}
+            <span>{isStarting ? "開啟靈光陣..." : "踏入修仙界"}</span>
           </button>
 
           {hasSave && (

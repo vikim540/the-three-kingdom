@@ -59,8 +59,10 @@ export class BattleScene extends Phaser.Scene {
     this.syncUnitsFromStore();
 
     this.storeUnsubscribe = useBattleStore.subscribe((state, prevState) => {
-      this.drawTacticalGridMesh(this.scale.width, this.scale.height);
-      this.updateUnitsVisual(state.units);
+      if (state.units !== prevState.units) {
+        this.drawTacticalGridMesh(this.scale.width, this.scale.height);
+        this.updateUnitsVisual(state.units);
+      }
       if (state.lastEvents !== prevState.lastEvents && state.lastEvents.length > 0) {
         this.playbackEvents(state.lastEvents);
       }

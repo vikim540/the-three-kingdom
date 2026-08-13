@@ -34,7 +34,7 @@ export interface BattleUnit {
   isDead: boolean;
 }
 
-export type BattlePhase = "DEPLOYMENT" | "BATTLE_IN_PROGRESS" | "VICTORY" | "DEFEAT";
+export type BattlePhase = "DEPLOYMENT" | "BATTLE_IN_PROGRESS" | "VICTORY" | "DEFEAT" | "RETREAT";
 
 // 戰鬥模擬引擎輸出的單一真相源事件 (Event Stream)
 export type CombatEventType =
@@ -44,7 +44,8 @@ export type CombatEventType =
   | "UNIT_DIED"
   | "PANIC_FLEE"
   | "BATTLE_VICTORY"
-  | "BATTLE_DEFEAT";
+  | "BATTLE_DEFEAT"
+  | "BATTLE_RETREAT";
 
 export interface CombatEvent {
   id: string;
@@ -73,7 +74,7 @@ export interface CombatLogMessage {
 }
 
 export interface BattleReward {
-  lootType: "AMBUSH_SPECIAL" | "STANDARD_FULL";
+  lootType: "AMBUSH_SPECIAL" | "STANDARD_FULL" | "RETREAT_SAFE";
   title: string;
   description: string;
   items: {
