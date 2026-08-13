@@ -6,6 +6,7 @@ import { gridToScreen, screenToGrid } from "@/game/utils/gridCoords";
 import { REGION_COLORS } from "@/types/region";
 import { EventBus, GAME_EVENTS } from "@/game/EventBus";
 import { BattleUnitContainer } from "@/game/objects/BattleUnitContainer";
+import { InputManager } from "@/game/controllers/InputManager";
 
 interface UnitSpriteContainer extends Phaser.GameObjects.Container {
   unitInstanceId?: string;
@@ -15,6 +16,7 @@ interface UnitSpriteContainer extends Phaser.GameObjects.Container {
 
 export class BattleScene extends Phaser.Scene {
   private unitContainers: Map<string, BattleUnitContainer> = new Map();
+  private inputManager!: InputManager;
   private regionGraphics!: Phaser.GameObjects.Graphics;
   private gridMeshGraphics!: Phaser.GameObjects.Graphics;
   private fogTileSprite!: Phaser.GameObjects.TileSprite;
@@ -57,6 +59,17 @@ export class BattleScene extends Phaser.Scene {
       padding: { x: 12, y: 6 },
     }).setOrigin(0.5).setDepth(200).setVisible(false);
 
+    // 6.5 Helbreath 風格輸入控制器與事件監聽
+    this.inputManager = new InputManager(this);
+    EventBus.on(GAME_EVENTS.REQUEST_MOVE, (targetPos: { x: number; y: number }) => {
+      // 尋找玩家主角 Container 並指示移動
+      this.unitContainers.forEach((container) => {
+        if (container.isPlayer) {
+          container.moveToTarget(targetPos.x, targetPos.y);
+        }
+      });
+    });
+
     // 7. 訂閱 Store (單一真相源：單位數據與 CombatEvent 事件流 Playback)
     this.syncUnitsFromStore();
 
@@ -90,16 +103,35 @@ export class BattleScene extends Phaser.Scene {
   private cleanup() {
     if (this.storeUnsubscribe) this.storeUnsubscribe();
     if (this.devStoreUnsubscribe) this.devStoreUnsubscribe();
+    if (this.inputManager) this.inputManager.destroy();
+    EventBus.off(GAME_EVENTS.REQUEST_MOVE);
     this.unitContainers.forEach((container) => {
       container.destroyContainer();
     });
     this.unitContainers.clear();
   }
 
-  update(_time: number, delta: number) {
+  update(time: number, delta: number) {
     if (this.fogTileSprite) {
       this.fogTileSprite.tilePositionX += delta * 0.015;
       this.fogTileSprite.tilePositionY += delta * 0.004;
+    }
+
+    // 1. 每幀更新所有角色的移動插值 (Helbreath 尋路)
+    this.unitContainers.forEach((container) => {
+      container.update(time, delta);
+    });
+
+    // 2. WASD 實時向量移動控制
+    if (this.inputManager) {
+      const { dx, dy } = this.inputManager.update(delta);
+      if (dx !== 0 || dy !== 0) {
+        this.unitContainers.forEach((container) => {
+          if (container.isPlayer) {
+            container.moveByVector(dx, dy, delta);
+          }
+        });
+      }
     }
   }
 

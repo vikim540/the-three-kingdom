@@ -6,6 +6,8 @@ export class BattleUnitContainer extends Phaser.GameObjects.Container {
   public unitInstanceId: string;
   public gridCol: number;
   public gridRow: number;
+  public isPlayer: boolean;
+  
   private baseScale: number = 1.0;
   private charSprite!: Phaser.GameObjects.Image;
   private hpFill!: Phaser.GameObjects.Rectangle;
@@ -14,6 +16,12 @@ export class BattleUnitContainer extends Phaser.GameObjects.Container {
   private auraDisk!: Phaser.GameObjects.Graphics;
   private ambushTag?: Phaser.GameObjects.Text;
 
+  // Helbreath 自由移動與追擊狀態
+  private targetPixelX: number | null = null;
+  private targetPixelY: number | null = null;
+  private moveSpeed: number = 180; // 像素/秒
+  private isMoving: boolean = false;
+
   constructor(scene: Phaser.Scene, unit: BattleUnit, screenWidth: number, screenHeight: number) {
     const { px, py, normY } = gridToScreen(unit.x, unit.y, screenWidth, screenHeight);
     super(scene, px, py);
@@ -21,6 +29,7 @@ export class BattleUnitContainer extends Phaser.GameObjects.Container {
     this.unitInstanceId = unit.instanceId;
     this.gridCol = unit.x;
     this.gridRow = unit.y;
+    this.isPlayer = unit.faction === "PLAYER";
     this.baseScale = 0.7 + normY * 0.45;
 
     this.setScale(this.baseScale);
@@ -30,16 +39,12 @@ export class BattleUnitContainer extends Phaser.GameObjects.Container {
     scene.add.existing(this);
   }
 
-  /**
-   * 構建視覺元件（光環、角色立繪、血條、數值、姓名、狀態標籤）
-   */
   private buildVisuals(unit: BattleUnit) {
-    const isPlayer = unit.faction === "PLAYER";
     const heroId = unit.heroConfig.id;
     const isAmbush = (unit.x >= 2 && unit.y >= 4 && unit.y <= 8) || unit.statusEffects.includes("AMBUSH");
 
-    // 1. 腳下動態陣法/光環底圖
-    const auraColor = isPlayer
+    // 1. 光環底圖
+    const auraColor = this.isPlayer
       ? heroId === "hero_huang_zhong"
         ? 0x10b981
         : heroId === "hero_xiahou_dun"
@@ -53,7 +58,6 @@ export class BattleUnitContainer extends Phaser.GameObjects.Container {
     this.auraDisk.lineStyle(2.5, auraColor, 1);
     this.auraDisk.strokeEllipse(0, 36, 72, 28);
 
-    // 光環微旋轉/呼吸
     this.scene.tweens.add({
       targets: this.auraDisk,
       alpha: isAmbush ? 0.45 : 0.6,
@@ -63,7 +67,7 @@ export class BattleUnitContainer extends Phaser.GameObjects.Container {
       ease: "Sine.easeInOut",
     });
 
-    // 2. 高清透明底角色立繪
+    // 2. 角色立繪
     let live2dKey = "live2d_protagonist";
     if (heroId === "hero_huang_zhong") live2dKey = "live2d_huang_zhong";
     else if (heroId === "enemy_bandit_chief") live2dKey = "live2d_bandit_chief";
@@ -78,7 +82,7 @@ export class BattleUnitContainer extends Phaser.GameObjects.Container {
       this.setAlpha(1.0);
     }
 
-    // Live2D 骨骼呼吸效果
+    // 呼吸動態
     this.scene.tweens.add({
       targets: this.charSprite,
       y: -36,
@@ -89,21 +93,20 @@ export class BattleUnitContainer extends Phaser.GameObjects.Container {
       ease: "Sine.easeInOut",
     });
 
-    // 3. 血條、精確數值顯示與名稱
+    // 3. 血條與數值
     const hpBarW = 72;
     const hpBg = this.scene.add.rectangle(0, -112, hpBarW, 8, 0x000000, 0.85);
     const hpRatio = Math.max(0, unit.currentHp / unit.maxHp);
-    
+
     this.hpFill = this.scene.add.rectangle(
       -hpBarW / 2,
       -112,
       hpBarW * hpRatio,
       7,
-      isPlayer ? 0x22c55e : 0xef4444,
+      this.isPlayer ? 0x22c55e : 0xef4444,
       1
     ).setOrigin(0, 0.5);
 
-    // 精確 HP 數字浮字 (如 120/120)
     this.hpText = this.scene.add.text(0, -112, `${unit.currentHp}/${unit.maxHp}`, {
       fontSize: "9px",
       color: "#ffffff",
@@ -114,7 +117,7 @@ export class BattleUnitContainer extends Phaser.GameObjects.Container {
 
     this.nameText = this.scene.add.text(0, 52, `${unit.heroConfig.name}`, {
       fontSize: "12px",
-      color: isPlayer ? "#fef08a" : "#fca5a5",
+      color: this.isPlayer ? "#fef08a" : "#fca5a5",
       fontStyle: "bold",
       stroke: "#000000",
       strokeThickness: 3.5,
@@ -133,7 +136,6 @@ export class BattleUnitContainer extends Phaser.GameObjects.Container {
       this.add(this.ambushTag);
     }
 
-    // 互動點擊區域
     this.setInteractive(
       new Phaser.Geom.Rectangle(-50, -110, 100, 160),
       Phaser.Geom.Rectangle.Contains
@@ -141,10 +143,82 @@ export class BattleUnitContainer extends Phaser.GameObjects.Container {
   }
 
   /**
-   * 播放受擊/技能視覺特效（震動、閃白、傷害數字飄字）
+   * Helbreath 風格：設置自由移動目標點
    */
+  public moveToTarget(targetX: number, targetY: number) {
+    this.targetPixelX = targetX;
+    this.targetPixelY = targetY;
+    this.isMoving = true;
+
+    // 面向轉向 (翻轉 Sprite)
+    if (targetX < this.x) {
+      this.charSprite.setFlipX(true);
+    } else {
+      this.charSprite.setFlipX(false);
+    }
+  }
+
+  /**
+   * Helbreath 風格：WASD 實時向量移動
+   */
+  public moveByVector(dx: number, dy: number, delta: number) {
+    if (dx === 0 && dy === 0) return;
+
+    // 清除點擊目標
+    this.targetPixelX = null;
+    this.targetPixelY = null;
+
+    const moveDist = (this.moveSpeed * delta) / 1000;
+    this.x += dx * moveDist;
+    this.y += dy * moveDist;
+
+    // 邊界卡位限制
+    const sw = this.scene.scale.width;
+    const sh = this.scene.scale.height;
+    this.x = Phaser.Math.Clamp(this.x, sw * 0.1, sw * 0.9);
+    this.y = Phaser.Math.Clamp(this.y, sh * 0.2, sh * 0.85);
+
+    // 面向轉向
+    if (dx < 0) this.charSprite.setFlipX(true);
+    else if (dx > 0) this.charSprite.setFlipX(false);
+
+    // 動態重算透視比例與 Depth
+    const normY = this.y / sh;
+    this.baseScale = 0.7 + normY * 0.45;
+    this.setScale(this.baseScale);
+    this.depth = Math.floor(this.y);
+  }
+
+  /**
+   * 每幀更新：Helbreath 風格點擊自動尋路移動插值
+   */
+  public update(_time: number, delta: number) {
+    if (this.isMoving && this.targetPixelX !== null && this.targetPixelY !== null) {
+      const distance = Phaser.Math.Distance.Between(this.x, this.y, this.targetPixelX, this.targetPixelY);
+      
+      if (distance < 5) {
+        this.x = this.targetPixelX;
+        this.y = this.targetPixelY;
+        this.isMoving = false;
+        this.targetPixelX = null;
+        this.targetPixelY = null;
+      } else {
+        const angle = Phaser.Math.Angle.Between(this.x, this.y, this.targetPixelX, this.targetPixelY);
+        const step = (this.moveSpeed * delta) / 1000;
+        
+        this.x += Math.cos(angle) * step;
+        this.y += Math.sin(angle) * step;
+
+        const sh = this.scene.scale.height;
+        const normY = this.y / sh;
+        this.baseScale = 0.7 + normY * 0.45;
+        this.setScale(this.baseScale);
+        this.depth = Math.floor(this.y);
+      }
+    }
+  }
+
   public playHitEffect(damage: number, isCrit: boolean = false) {
-    // 1. 受擊受損紅閃特效
     this.scene.tweens.add({
       targets: this.charSprite,
       tint: 0xff0000,
@@ -153,7 +227,6 @@ export class BattleUnitContainer extends Phaser.GameObjects.Container {
       onComplete: () => this.charSprite.clearTint(),
     });
 
-    // 2. 劇烈震動
     this.scene.tweens.add({
       targets: this,
       x: this.x + (Math.random() > 0.5 ? 10 : -10),
@@ -162,7 +235,6 @@ export class BattleUnitContainer extends Phaser.GameObjects.Container {
       repeat: 3,
     });
 
-    // 3. 飄字特效
     const floatText = this.scene.add.text(
       this.x,
       this.y - 80,
@@ -186,10 +258,12 @@ export class BattleUnitContainer extends Phaser.GameObjects.Container {
     });
   }
 
-  /**
-   * 根據狀態更新位置與血條數值
-   */
   public updateState(unit: BattleUnit, screenWidth: number, screenHeight: number) {
+    // 若主角正在自由移動，不被靜態網格強行拉回
+    if (this.isPlayer && (this.isMoving || this.targetPixelX !== null)) {
+      return;
+    }
+
     this.gridCol = unit.x;
     this.gridRow = unit.y;
 
@@ -197,16 +271,11 @@ export class BattleUnitContainer extends Phaser.GameObjects.Container {
     this.baseScale = 0.7 + normY * 0.45;
     this.depth = Math.floor(py);
 
-    // 血條與 HP 數字更新
     const hpBarW = 72;
     const hpRatio = Math.max(0, unit.currentHp / unit.maxHp);
     this.hpFill.setSize(hpBarW * hpRatio, 7);
     this.hpText.setText(`${unit.currentHp}/${unit.maxHp}`);
 
-    // 名稱位置更新
-    this.nameText.setText(`${unit.heroConfig.name}`);
-
-    // 平滑位移動畫
     this.scene.tweens.add({
       targets: this,
       x: px,
