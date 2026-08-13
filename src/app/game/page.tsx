@@ -178,10 +178,34 @@ export default function GamePage() {
     );
   };
 
+  // ⭐ 一鍵推薦佈陣：自動將主角放在 (1, 7)，名將放在的最佳戰術網格 (如黃忠草叢伏擊 3, 5)
+  const handleQuickAutoDeploy = () => {
+    setUnits(
+      units.map((u) => {
+        if (u.heroConfig.id === "hero_protagonist") {
+          return { ...u, x: 1, y: 7 };
+        }
+        if (u.heroConfig.id === "hero_huang_zhong") {
+          return { ...u, x: 3, y: 5, statusEffects: ["AMBUSH"] };
+        }
+        if (u.heroConfig.id === "hero_xiahou_dun") {
+          return { ...u, x: 2, y: 7 };
+        }
+        if (u.heroConfig.id === "hero_zhao_yun") {
+          return { ...u, x: 0, y: 7 };
+        }
+        if (u.heroConfig.id === "hero_guo_jia") {
+          return { ...u, x: 3, y: 7 };
+        }
+        return u;
+      })
+    );
+    addCombatLog("✨ 【一鍵完美佈陣完成】名將各就各位，開啟仙家陣型！", "skill");
+  };
+
   const handleBanditChoice = (choiceType: "ATTACK" | "AMBUSH" | "GUARD") => {
     setIsDialogueActive(false);
     if (choiceType === "AMBUSH") {
-      // 自動將黃忠部署至右側草叢伏擊網格 (3, 5)
       setUnits(
         units.map((u) =>
           u.heroConfig.id === "hero_huang_zhong"
@@ -356,6 +380,8 @@ export default function GamePage() {
               window.location.href = "/";
             }}
             onExportSave={handleExportSave}
+            onQuickAutoDeploy={handleQuickAutoDeploy}
+            onExecuteAction={handleExecuteAction}
           />
 
           <FanOutHandCards onPlaceUnit={handlePlaceUnit} />

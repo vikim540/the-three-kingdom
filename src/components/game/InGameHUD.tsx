@@ -5,7 +5,24 @@ import { useBattleStore } from "@/stores/useBattleStore";
 import { useGameStore } from "@/stores/useGameStore";
 import { useInventoryStore } from "@/stores/useInventoryStore";
 import { DevModeEditor } from "./DevModeEditor";
-import { Menu, RotateCcw, X, ScrollText, Backpack, Users, Play, Crosshair } from "lucide-react";
+import { TacticalActionType } from "@/types/game";
+import {
+  Menu,
+  RotateCcw,
+  X,
+  ScrollText,
+  Backpack,
+  Users,
+  Play,
+  Crosshair,
+  Wand2,
+  Swords,
+  Shield,
+  Zap,
+  Sparkles,
+  Pause,
+  FastForward,
+} from "lucide-react";
 
 interface InGameHUDProps {
   onStartBattle: () => void;
@@ -13,6 +30,8 @@ interface InGameHUDProps {
   onResetDeployment: () => void;
   onReturnHome: () => void;
   onExportSave: () => void;
+  onQuickAutoDeploy?: () => void;
+  onExecuteAction?: (action: TacticalActionType) => void;
 }
 
 export const InGameHUD: React.FC<InGameHUDProps> = ({
@@ -21,6 +40,8 @@ export const InGameHUD: React.FC<InGameHUDProps> = ({
   onResetDeployment,
   onReturnHome,
   onExportSave,
+  onQuickAutoDeploy,
+  onExecuteAction,
 }) => {
   const { phase, currentTurn, units, combatLogs } = useBattleStore();
   const { selectedHeroId } = useGameStore();
@@ -29,6 +50,7 @@ export const InGameHUD: React.FC<InGameHUDProps> = ({
   const [showMenu, setShowMenu] = useState(false);
   const [showLog, setShowLog] = useState(false);
   const [showTip, setShowTip] = useState(true);
+  const [battleSpeed, setBattleSpeed] = useState<"1x" | "2x" | "PAUSE">("1x");
   const logRef = useRef<HTMLDivElement>(null);
 
   const playerAlive = units.filter((u) => u.faction === "PLAYER" && !u.isDead).length;
@@ -47,7 +69,7 @@ export const InGameHUD: React.FC<InGameHUDProps> = ({
       <DevModeEditor />
 
       {/* ─── 頂部左側：回合數與存活數 ─── */}
-      <div className="fixed top-4 left-4 z-30 flex items-start gap-3 pointer-events-none">
+      <div className="fixed top-4 left-4 z-30 flex items-start gap-3 pointer-events-none select-none">
         <div
           className="px-5 py-2.5 rounded-xl border-2 border-amber-600/50 shadow-2xl backdrop-blur-md"
           style={{ background: "linear-gradient(135deg, rgba(15,13,10,0.88), rgba(28,25,23,0.78))" }}
@@ -69,15 +91,15 @@ export const InGameHUD: React.FC<InGameHUDProps> = ({
       </div>
 
       {/* ─── 上方中央：當前階段 ─── */}
-      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
+      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-30 pointer-events-none select-none">
         <div
           className="px-6 py-1.5 rounded-full border border-amber-500/40 text-amber-200 text-xs font-black font-serif-title tracking-widest shadow-lg backdrop-blur-md flex items-center gap-2"
           style={{ background: "linear-gradient(180deg, rgba(20,16,10,0.85), rgba(9,9,11,0.9))" }}
         >
           <span className="text-amber-400">❖</span>
           <span>
-            {phase === "DEPLOYMENT" && "布陣階段 (拖拽手牌至亮色區域放置)"}
-            {phase === "BATTLE_IN_PROGRESS" && "兩軍交鋒中"}
+            {phase === "DEPLOYMENT" && "布陣階段 (可拖拽手牌或點擊快捷布陣)"}
+            {phase === "BATTLE_IN_PROGRESS" && "兩軍交鋒中 (可點擊底部名將指令)"}
             {phase === "VICTORY" && "大獲全勝"}
             {phase === "DEFEAT" && "戰敗失陷"}
           </span>
@@ -85,20 +107,30 @@ export const InGameHUD: React.FC<InGameHUDProps> = ({
         </div>
       </div>
 
-      {/* ─── 頂部右側：系統選單與日誌 ─── */}
-      <div className="fixed top-4 right-4 z-40 flex items-center gap-2">
+      {/* ─── 頂部右側：系統選單、速度切換與日誌 ─── */}
+      <div className="fixed top-4 right-4 z-40 flex items-center gap-2 select-none">
+        {phase === "BATTLE_IN_PROGRESS" && (
+          <button
+            onClick={() => setBattleSpeed((s) => (s === "1x" ? "2x" : s === "2x" ? "PAUSE" : "1x"))}
+            className="px-3 py-2 rounded-xl border border-amber-500/60 text-amber-300 font-bold text-xs flex items-center gap-1 backdrop-blur-md shadow-lg bg-stone-900/90 hover:bg-stone-800 transition"
+          >
+            {battleSpeed === "1x" && <Play className="w-3.5 h-3.5" />}
+            {battleSpeed === "2x" && <FastForward className="w-3.5 h-3.5" />}
+            {battleSpeed === "PAUSE" && <Pause className="w-3.5 h-3.5 text-red-400" />}
+            <span>{battleSpeed}</span>
+          </button>
+        )}
+
         <button
           onClick={() => setShowLog((v) => !v)}
-          className="p-2.5 rounded-xl border border-stone-600/50 text-stone-200 hover:text-amber-300 hover:border-amber-500/60 transition backdrop-blur-md shadow-lg"
-          style={{ background: "rgba(15,13,10,0.82)" }}
+          className="p-2.5 rounded-xl border border-stone-600/50 text-stone-200 hover:text-amber-300 hover:border-amber-500/60 transition backdrop-blur-md shadow-lg bg-stone-900/85"
           title="戰鬥日誌"
         >
           <ScrollText className="w-4 h-4" />
         </button>
         <button
           onClick={() => setShowMenu((v) => !v)}
-          className="p-2.5 rounded-xl border border-stone-600/50 text-stone-200 hover:text-amber-300 hover:border-amber-500/60 transition backdrop-blur-md shadow-lg"
-          style={{ background: "rgba(15,13,10,0.82)" }}
+          className="p-2.5 rounded-xl border border-stone-600/50 text-stone-200 hover:text-amber-300 hover:border-amber-500/60 transition backdrop-blur-md shadow-lg bg-stone-900/85"
         >
           {showMenu ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
         </button>
@@ -107,7 +139,7 @@ export const InGameHUD: React.FC<InGameHUDProps> = ({
       {/* ─── 選單下拉 ─── */}
       {showMenu && (
         <div
-          className="fixed top-16 right-4 z-50 w-48 rounded-xl overflow-hidden border-2 border-amber-600/40 shadow-2xl"
+          className="fixed top-16 right-4 z-50 w-48 rounded-xl overflow-hidden border-2 border-amber-600/40 shadow-2xl select-none"
           style={{ background: "rgba(15,13,10,0.95)", backdropFilter: "blur(16px)" }}
         >
           <button
@@ -134,7 +166,7 @@ export const InGameHUD: React.FC<InGameHUDProps> = ({
       {/* ─── 戰鬥日誌浮層 ─── */}
       {showLog && (
         <div
-          className="fixed top-16 right-16 z-50 w-80 max-h-64 overflow-y-auto rounded-xl border-2 border-stone-700/60 shadow-2xl"
+          className="fixed top-16 right-16 z-50 w-80 max-h-64 overflow-y-auto rounded-xl border-2 border-stone-700/60 shadow-2xl select-none"
           style={{ background: "rgba(12,10,9,0.92)", backdropFilter: "blur(14px)" }}
           ref={logRef}
         >
@@ -157,54 +189,31 @@ export const InGameHUD: React.FC<InGameHUDProps> = ({
         </div>
       )}
 
-      {/* ─── 左側中部：操作提示氣泡 (可關閉) ─── */}
-      {showTip && phase === "DEPLOYMENT" && (
-        <div className="fixed top-1/3 left-4 z-30 max-w-[210px] pointer-events-auto animate-fade-in">
-          <div
-            className="p-3.5 rounded-xl border-2 border-amber-600/60 shadow-2xl backdrop-blur-md flex items-start justify-between gap-2"
-            style={{ background: "linear-gradient(135deg, rgba(24,19,15,0.9), rgba(12,10,9,0.85))" }}
-          >
-            <div className="flex items-start gap-2">
-              <span className="text-xl mt-0.5">🏮</span>
-              <div className="text-xs leading-relaxed text-stone-200">
-                {isHuangZhong ? (
-                  <>
-                    拖拽<strong className="text-amber-300">黃忠</strong>至側翼<span className="text-emerald-400">草叢埋伏區</span>，觸發神箭狙殺敵首！
-                  </>
-                ) : (
-                  <>
-                    拖拽名將卡牌至亮色區域，再點擊左下角圓形<strong className="text-emerald-400">【開戰】</strong>！
-                  </>
-                )}
-              </div>
-            </div>
-            <button
-              onClick={() => setShowTip(false)}
-              className="text-stone-500 hover:text-stone-300 text-xs p-0.5"
-            >
-              ✕
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ─── 左下角：圓形【開始戰鬥】大按鈕 (下移至左下角，圓形霸氣設計) ─── */}
+      {/* ─── ⭐ 布陣階段：一鍵推薦佈陣與開戰控制列 ─── */}
       {phase === "DEPLOYMENT" && (
-        <div className="fixed bottom-6 left-6 z-40 flex items-center gap-3 pointer-events-auto">
+        <div className="fixed bottom-6 left-6 z-40 flex items-center gap-3 pointer-events-auto select-none">
           <button
             onClick={onStartBattle}
-            className="w-18 h-18 rounded-full border-2 border-emerald-400 font-black font-serif-title text-sm text-emerald-100 shadow-[0_0_30px_rgba(16,185,129,0.6)] flex flex-col items-center justify-center transition-all duration-200 hover:scale-110 active:scale-95 animate-pulse"
-            style={{ background: "linear-gradient(135deg, rgba(6,78,59,0.98), rgba(4,120,87,0.92))" }}
+            className="w-18 h-18 rounded-full border-2 border-emerald-400 font-black font-serif-title text-sm text-emerald-100 shadow-[0_0_35px_rgba(16,185,129,0.7)] flex flex-col items-center justify-center transition-all duration-200 hover:scale-110 active:scale-95 animate-pulse bg-emerald-900/90"
           >
             <Play className="w-6 h-6 fill-emerald-100" />
             <span className="text-[11px] font-bold tracking-widest mt-0.5">開戰</span>
           </button>
 
+          {onQuickAutoDeploy && (
+            <button
+              onClick={onQuickAutoDeploy}
+              className="px-4 py-3 rounded-xl border-2 border-amber-400 font-bold text-xs text-amber-200 shadow-xl flex items-center gap-1.5 transition hover:scale-105 bg-amber-950/90"
+            >
+              <Sparkles className="w-4 h-4 text-amber-400" />
+              <span>一鍵完美佈陣</span>
+            </button>
+          )}
+
           {isHuangZhong && (
             <button
               onClick={onBaitAction}
-              className="px-3.5 py-2 rounded-xl border-2 border-amber-500/80 font-bold text-xs text-amber-200 shadow-lg flex items-center gap-1 transition hover:scale-105"
-              style={{ background: "linear-gradient(135deg, rgba(120,40,10,0.95), rgba(180,70,15,0.9))" }}
+              className="px-3.5 py-3 rounded-xl border-2 border-amber-500/80 font-bold text-xs text-amber-200 shadow-lg flex items-center gap-1 transition hover:scale-105 bg-stone-900/90"
             >
               <Crosshair className="w-3.5 h-3.5" /> 假逃誘敵
             </button>
@@ -212,8 +221,50 @@ export const InGameHUD: React.FC<InGameHUDProps> = ({
         </div>
       )}
 
+      {/* ─── ⭐ 戰鬥交鋒階段：名將戰術快捷指令欄 (Bottom Center Quick Action Dock) ─── */}
+      {phase === "BATTLE_IN_PROGRESS" && onExecuteAction && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 pointer-events-auto select-none">
+          <div className="px-5 py-2.5 rounded-2xl border-2 border-amber-500/50 bg-stone-950/95 backdrop-blur-xl shadow-[0_0_40px_rgba(0,0,0,0.8)] flex items-center gap-3">
+            <div className="text-xs font-bold text-amber-300 font-serif-title pr-2 border-r border-stone-800 flex items-center gap-1">
+              <Zap className="w-4 h-4 text-amber-400" />
+              <span>名將戰術</span>
+            </div>
+
+            <button
+              onClick={() => onExecuteAction("ATTACK")}
+              className="px-3.5 py-2 rounded-xl border border-red-500/50 bg-red-950/60 hover:bg-red-900/80 text-red-200 font-bold text-xs flex items-center gap-1.5 transition hover:scale-105 active:scale-95 shadow-md"
+            >
+              <Swords className="w-3.5 h-3.5 text-red-400" />
+              <span>物理重擊</span>
+            </button>
+
+            <button
+              onClick={() => onExecuteAction("SKILL")}
+              className="px-3.5 py-2 rounded-xl border border-amber-400/60 bg-amber-950/70 hover:bg-amber-900/90 text-amber-200 font-bold text-xs flex items-center gap-1.5 transition hover:scale-105 active:scale-95 shadow-md"
+            >
+              <Wand2 className="w-3.5 h-3.5 text-amber-400" />
+              <span>武將特技</span>
+            </button>
+
+            <button
+              onClick={() => onExecuteAction("ITEM")}
+              className="px-3.5 py-2 rounded-xl border border-emerald-500/50 bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-200 font-bold text-xs flex items-center gap-1.5 transition hover:scale-105 active:scale-95 shadow-md"
+            >
+              <span>🧪 服用修仙丹</span>
+            </button>
+
+            <button
+              onClick={() => onExecuteAction("FLEE")}
+              className="px-3.5 py-2 rounded-xl border border-purple-500/50 bg-purple-950/60 hover:bg-purple-900/80 text-purple-200 font-bold text-xs flex items-center gap-1.5 transition hover:scale-105 active:scale-95 shadow-md"
+            >
+              <span>🏃 戰術撤退</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ─── 右下角：資源與背包快捷入口 (B / TAB) ─── */}
-      <div className="fixed bottom-6 right-6 z-30 flex items-center gap-3 pointer-events-auto">
+      <div className="fixed bottom-6 right-6 z-30 flex items-center gap-3 pointer-events-auto select-none">
         <div className="px-3 py-2 rounded-xl border border-stone-700 bg-stone-950/85 text-xs font-bold flex items-center gap-3 backdrop-blur-md">
           <span className="text-amber-300">💰 {spiritStones}</span>
           <span className="text-purple-300">✨ {heroSouls}</span>

@@ -14,6 +14,7 @@ interface UnitSpriteContainer extends Phaser.GameObjects.Container {
 export class BattleScene extends Phaser.Scene {
   private unitContainers: Map<string, UnitSpriteContainer> = new Map();
   private regionGraphics!: Phaser.GameObjects.Graphics;
+  private gridMeshGraphics!: Phaser.GameObjects.Graphics;
   private fogTileSprite!: Phaser.GameObjects.TileSprite;
   private bushGraphics!: Phaser.GameObjects.Graphics;
   private tooltipText?: Phaser.GameObjects.Text;
@@ -37,11 +38,15 @@ export class BattleScene extends Phaser.Scene {
     // 3. 氣若柔絲 局部飄霧
     this.addDriftingFogLayer();
 
-    // 4. 多邊形圖層 (開發者模式)
+    // 4. 布陣階段戰術 4x10 網格線高亮圖層
+    this.gridMeshGraphics = this.add.graphics();
+    this.drawTacticalGridMesh(sw, sh);
+
+    // 5. 多邊形圖層 (開發者模式)
     this.regionGraphics = this.add.graphics();
     this.drawPolygonsOverlay();
 
-    // 5. 提示文字
+    // 6. 提示文字
     this.tooltipText = this.add.text(sw / 2, 30, "", {
       fontSize: "13px",
       color: "#fef08a",
@@ -50,10 +55,11 @@ export class BattleScene extends Phaser.Scene {
       padding: { x: 12, y: 6 },
     }).setOrigin(0.5).setDepth(200).setVisible(false);
 
-    // 6. 訂閱 Store (單一真相源：單位數據與 CombatEvent 事件流 Playback)
+    // 7. 訂閱 Store (單一真相源：單位數據與 CombatEvent 事件流 Playback)
     this.syncUnitsFromStore();
 
     this.storeUnsubscribe = useBattleStore.subscribe((state, prevState) => {
+      this.drawTacticalGridMesh(this.scale.width, this.scale.height);
       this.updateUnitsVisual(state.units);
       if (state.lastEvents !== prevState.lastEvents && state.lastEvents.length > 0) {
         this.playbackEvents(state.lastEvents);
@@ -64,12 +70,12 @@ export class BattleScene extends Phaser.Scene {
       this.drawPolygonsOverlay();
     });
 
-    // 7. 響應式 Resize（使用 scale.on("resize") 動態重算，嚴禁 scene.restart）
+    // 8. 響應式 Resize（使用 scale.on("resize") 動態重算，嚴禁 scene.restart）
     this.scale.on("resize", (gameSize: Phaser.Structs.Size) => {
       this.repositionElements(gameSize.width, gameSize.height);
     });
 
-    // 8. 生命週期銷毀時對稱取消訂閱
+    // 9. 生命週期銷毀時對稱取消訂閱
     this.events.once("shutdown", this.cleanup, this);
     this.events.once("destroy", this.cleanup, this);
   }
@@ -132,6 +138,41 @@ export class BattleScene extends Phaser.Scene {
       repeat: -1,
       ease: "Sine.easeInOut",
     });
+  }
+
+  /**
+   * 布陣階段繪製清晰的 4x10 水墨金光戰術網格
+   */
+  private drawTacticalGridMesh(sw: number, sh: number) {
+    if (!this.gridMeshGraphics) return;
+    this.gridMeshGraphics.clear();
+
+    const phase = useBattleStore.getState().phase;
+    if (phase !== "DEPLOYMENT") return;
+
+    // 繪製梯形透視網格線
+    this.gridMeshGraphics.lineStyle(1.5, 0xf59e0b, 0.35);
+
+    // 橫向 10 行分界線
+    for (let r = 0; r <= 10; r++) {
+      const pLeft = gridToScreen(0, r, sw, sh);
+      const pRight = gridToScreen(3, r, sw, sh);
+      this.gridMeshGraphics.lineBetween(pLeft.px - 35, pLeft.py, pRight.px + 35, pRight.py);
+    }
+
+    // 縱向 4 列分界線
+    for (let c = 0; c <= 4; c++) {
+      const pTop = gridToScreen(c - 0.5, 0, sw, sh);
+      const pBottom = gridToScreen(c - 0.5, 9, sw, sh);
+      this.gridMeshGraphics.lineBetween(pTop.px, pTop.py, pBottom.px, pBottom.py);
+    }
+
+    // 高亮側翼伏擊網格 (col: 3, row: 5)
+    const ambushPos = gridToScreen(3, 5, sw, sh);
+    this.gridMeshGraphics.fillStyle(0x10b981, 0.3);
+    this.gridMeshGraphics.lineStyle(2, 0x34d399, 0.9);
+    this.gridMeshGraphics.fillEllipse(ambushPos.px, ambushPos.py, 64, 26);
+    this.gridMeshGraphics.strokeEllipse(ambushPos.px, ambushPos.py, 64, 26);
   }
 
   private addDriftingFogLayer() {
@@ -525,6 +566,7 @@ export class BattleScene extends Phaser.Scene {
    */
   private repositionElements(sw: number, sh: number) {
     this.drawBushOverlay(sw, sh);
+    this.drawTacticalGridMesh(sw, sh);
     this.drawPolygonsOverlay();
     this.updateUnitsVisual(useBattleStore.getState().units);
   }
