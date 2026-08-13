@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { useBattleStore } from "@/stores/useBattleStore";
 import { useGameStore } from "@/stores/useGameStore";
 import { useDevStore } from "@/stores/useDevStore";
+import { useInventoryStore } from "@/stores/useInventoryStore";
 import { InGameHUD } from "@/components/game/InGameHUD";
 import { RadialCommandMenu } from "@/components/game/RadialCommandMenu";
 import { FanOutHandCards } from "@/components/game/FanOutHandCards";
@@ -30,18 +31,20 @@ export default function GamePage() {
     units,
     selectedUnitId,
     activeAction,
+    currentTurn,
     setPhase,
     setUnits,
     setSelectedUnitId,
     setActiveAction,
     addCombatLog,
+    emitEvents,
     setReward,
     setTacticalOutcome,
     resetBattle,
   } = useBattleStore();
 
   const { selectedHeroId, storyStep, setSelectedHeroId, setStoryStep } = useGameStore();
-  const { regions } = useDevStore();
+  const { spiritStones, heroSouls, heroInventories } = useInventoryStore();
 
   const [loading, setLoading] = useState(true);
   const [isDialogueActive, setIsDialogueActive] = useState(true);
@@ -131,7 +134,7 @@ export default function GamePage() {
     setPhase("DEPLOYMENT");
   }, [selectedHeroId, setUnits, setPhase]);
 
-  // 載入 SQLite 存檔
+  // 載入與還原 SQLite 真存檔 (Restore Full Game State)
   useEffect(() => {
     fetch("/api/save")
       .then((r) => r.json())
@@ -189,14 +192,41 @@ export default function GamePage() {
     }
   };
 
-  const handleConfirmSummon = async (hero: HeroConfig) => {
-    setSelectedHeroId(hero.id);
-    setStoryStep("BATTLE");
+  const saveGameState = async (overrideStep?: StoryStep) => {
+    const currentUnits = useBattleStore.getState().units;
+    const currentHeroId = useGameStore.getState().selectedHeroId;
+    const step = overrideStep || useGameStore.getState().storyStep;
+
+    const fullSavePayload = {
+      selectedHeroId: currentHeroId,
+      storyStep: step,
+      gameData: {
+        spiritStones,
+        heroSouls,
+        heroInventories,
+        units: currentUnits.map((u) => ({
+          instanceId: u.instanceId,
+          heroId: u.heroConfig.id,
+          x: u.x,
+          y: u.y,
+          hp: u.currentHp,
+          maxHp: u.maxHp,
+          isDead: u.isDead,
+        })),
+      },
+    };
+
     await fetch("/api/save", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ selectedHeroId: hero.id, storyStep: "BATTLE", gameData: {} }),
+      body: JSON.stringify(fullSavePayload),
     });
+  };
+
+  const handleConfirmSummon = async (hero: HeroConfig) => {
+    setSelectedHeroId(hero.id);
+    setStoryStep("BATTLE");
+    await saveGameState("BATTLE");
   };
 
   const handleStartBattle = () => {
@@ -211,17 +241,50 @@ export default function GamePage() {
     handleStartBattle();
   };
 
+  // 玩家代理指令即時響應模擬引擎 (Player Agency)
   const handleExecuteAction = (action: TacticalActionType) => {
     setActiveAction(action);
-    if (action === "SKILL") {
-      addCombatLog("🏹 觸發主導名將技能！", "skill");
-    } else if (action === "ITEM") {
-      addCombatLog("🧪 服用紫霄修仙丹，恢復全隊 50 生命！", "skill");
+    const currentUnits = useBattleStore.getState().units;
+    const result = executeBattleStep(currentUnits, currentTurn, action);
+
+    result.logs.forEach((l) => addCombatLog(l.text, l.type));
+    setUnits(result.updatedUnits);
+    emitEvents(result.events);
+
+    if (result.isFinished) {
+      if (battleIntervalRef.current) clearInterval(battleIntervalRef.current);
+      if (result.outcome) setTacticalOutcome(result.outcome);
+      if (result.reward) {
+        setReward(result.reward);
+        setPhase("VICTORY");
+        setStoryStep("COMPLETED");
+        saveGameState("COMPLETED");
+      } else {
+        setPhase("DEFEAT");
+      }
     }
   };
 
   const handleExportSave = () => {
-    const blob = new Blob([JSON.stringify({ selectedHeroId, storyStep, exportedAt: new Date().toISOString() }, null, 2)], { type: "application/json" });
+    const currentUnits = useBattleStore.getState().units;
+    const saveObj = {
+      selectedHeroId,
+      storyStep,
+      spiritStones,
+      heroSouls,
+      heroInventories,
+      units: currentUnits.map((u) => ({
+        instanceId: u.instanceId,
+        heroId: u.heroConfig.id,
+        x: u.x,
+        y: u.y,
+        hp: u.currentHp,
+        isDead: u.isDead,
+      })),
+      exportedAt: new Date().toISOString(),
+    };
+
+    const blob = new Blob([JSON.stringify(saveObj, null, 2)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = `three_kingdoms_save_${Date.now()}.json`;
@@ -239,6 +302,7 @@ export default function GamePage() {
 
       result.logs.forEach((l) => addCombatLog(l.text, l.type));
       setUnits(result.updatedUnits);
+      emitEvents(result.events);
 
       if (result.isFinished || turn >= 15) {
         if (battleIntervalRef.current) clearInterval(battleIntervalRef.current);
@@ -247,6 +311,7 @@ export default function GamePage() {
           setReward(result.reward);
           setPhase("VICTORY");
           setStoryStep("COMPLETED");
+          saveGameState("COMPLETED");
         } else {
           setPhase("DEFEAT");
         }

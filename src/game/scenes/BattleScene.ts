@@ -1,7 +1,7 @@
 import * as Phaser from "phaser";
 import { useBattleStore } from "@/stores/useBattleStore";
 import { useDevStore } from "@/stores/useDevStore";
-import { BattleUnit } from "@/types/game";
+import { BattleUnit, CombatEvent } from "@/types/game";
 import { gridToScreen, screenToGrid } from "@/game/utils/gridCoords";
 import { REGION_COLORS } from "@/types/region";
 
@@ -50,11 +50,14 @@ export class BattleScene extends Phaser.Scene {
       padding: { x: 12, y: 6 },
     }).setOrigin(0.5).setDepth(200).setVisible(false);
 
-    // 6. 訂閱 Store (保持單一真相源 Playback 演出)
+    // 6. 訂閱 Store (單一真相源：單位數據與 CombatEvent 事件流 Playback)
     this.syncUnitsFromStore();
 
-    this.storeUnsubscribe = useBattleStore.subscribe((state) => {
+    this.storeUnsubscribe = useBattleStore.subscribe((state, prevState) => {
       this.updateUnitsVisual(state.units);
+      if (state.lastEvents !== prevState.lastEvents && state.lastEvents.length > 0) {
+        this.playbackEvents(state.lastEvents);
+      }
     });
 
     this.devStoreUnsubscribe = useDevStore.subscribe(() => {
@@ -183,6 +186,103 @@ export class BattleScene extends Phaser.Scene {
 
   private syncUnitsFromStore() {
     this.updateUnitsVisual(useBattleStore.getState().units);
+  }
+
+  /**
+   * 戰鬥事件流視覺 Playback 演出器
+   */
+  private playbackEvents(events: CombatEvent[]) {
+    events.forEach((evt, idx) => {
+      this.time.delayedCall(idx * 300, () => {
+        if (evt.type === "SKILL_TRIGGERED" && evt.unitId) {
+          const container = this.unitContainers.get(evt.unitId);
+          if (container) {
+            const skillText = this.add.text(container.x, container.y - 130, `✨【${evt.skillName || "武將特技"}】`, {
+              fontSize: "18px",
+              color: "#fef08a",
+              fontStyle: "bold",
+              stroke: "#92400e",
+              strokeThickness: 4,
+            }).setOrigin(0.5).setDepth(300);
+
+            this.tweens.add({
+              targets: skillText,
+              y: container.y - 170,
+              scaleX: 1.25,
+              scaleY: 1.25,
+              alpha: 0,
+              duration: 1200,
+              ease: "Power2.out",
+              onComplete: () => skillText.destroy(),
+            });
+          }
+        }
+
+        if (evt.type === "ATTACK_HIT" && evt.targetId) {
+          const targetContainer = this.unitContainers.get(evt.targetId);
+          if (targetContainer) {
+            const isCrit = evt.isCrit;
+            const dmgText = this.add.text(
+              targetContainer.x,
+              targetContainer.y - 80,
+              isCrit ? `💥 暴擊 ${evt.damage}` : `⚔️ -${evt.damage}`,
+              {
+                fontSize: isCrit ? "22px" : "16px",
+                color: isCrit ? "#f59e0b" : "#ef4444",
+                fontStyle: "bold",
+                stroke: "#000000",
+                strokeThickness: 4,
+              }
+            ).setOrigin(0.5).setDepth(310);
+
+            this.tweens.add({
+              targets: dmgText,
+              y: targetContainer.y - 130,
+              alpha: 0,
+              duration: 1000,
+              ease: "Back.out",
+              onComplete: () => dmgText.destroy(),
+            });
+
+            // 震動打擊效果
+            this.tweens.add({
+              targets: targetContainer,
+              x: targetContainer.x + (Math.random() > 0.5 ? 8 : -8),
+              duration: 50,
+              yoyo: true,
+              repeat: 3,
+            });
+          }
+        }
+
+        if (evt.type === "PANIC_FLEE" && evt.fleeUnitIds) {
+          evt.fleeUnitIds.forEach((fleeId) => {
+            const container = this.unitContainers.get(fleeId);
+            if (container) {
+              const panicText = this.add.text(container.x, container.y - 90, "😱 大寨主死了！快逃啊！", {
+                fontSize: "12px",
+                color: "#fca5a5",
+                fontStyle: "bold",
+                stroke: "#7f1d1d",
+                strokeThickness: 3,
+              }).setOrigin(0.5).setDepth(290);
+
+              this.tweens.add({
+                targets: container,
+                x: container.x + 350,
+                alpha: 0,
+                duration: 1200,
+                ease: "Power2.in",
+                onComplete: () => {
+                  panicText.destroy();
+                  container.setVisible(false);
+                },
+              });
+            }
+          });
+        }
+      });
+    });
   }
 
   /**
