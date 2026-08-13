@@ -9,6 +9,7 @@ export class BattleUnitContainer extends Phaser.GameObjects.Container {
   private baseScale: number = 1.0;
   private charSprite!: Phaser.GameObjects.Image;
   private hpFill!: Phaser.GameObjects.Rectangle;
+  private hpText!: Phaser.GameObjects.Text;
   private nameText!: Phaser.GameObjects.Text;
   private auraDisk!: Phaser.GameObjects.Graphics;
   private ambushTag?: Phaser.GameObjects.Text;
@@ -30,14 +31,14 @@ export class BattleUnitContainer extends Phaser.GameObjects.Container {
   }
 
   /**
-   * 構建視覺元件（光環、角色立繪、血條、姓名、狀態標籤）
+   * 構建視覺元件（光環、角色立繪、血條、數值、姓名、狀態標籤）
    */
   private buildVisuals(unit: BattleUnit) {
     const isPlayer = unit.faction === "PLAYER";
     const heroId = unit.heroConfig.id;
     const isAmbush = (unit.x >= 2 && unit.y >= 4 && unit.y <= 8) || unit.statusEffects.includes("AMBUSH");
 
-    // 1. 光環底圖
+    // 1. 腳下動態陣法/光環底圖
     const auraColor = isPlayer
       ? heroId === "hero_huang_zhong"
         ? 0x10b981
@@ -51,6 +52,16 @@ export class BattleUnitContainer extends Phaser.GameObjects.Container {
     this.auraDisk.fillEllipse(0, 36, 72, 28);
     this.auraDisk.lineStyle(2.5, auraColor, 1);
     this.auraDisk.strokeEllipse(0, 36, 72, 28);
+
+    // 光環微旋轉/呼吸
+    this.scene.tweens.add({
+      targets: this.auraDisk,
+      alpha: isAmbush ? 0.45 : 0.6,
+      duration: 1200,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.easeInOut",
+    });
 
     // 2. 高清透明底角色立繪
     let live2dKey = "live2d_protagonist";
@@ -78,30 +89,41 @@ export class BattleUnitContainer extends Phaser.GameObjects.Container {
       ease: "Sine.easeInOut",
     });
 
-    // 3. 血條與名稱
-    const hpBarW = 64;
-    const hpBg = this.scene.add.rectangle(0, -112, hpBarW, 6, 0x000000, 0.85);
+    // 3. 血條、精確數值顯示與名稱
+    const hpBarW = 72;
+    const hpBg = this.scene.add.rectangle(0, -112, hpBarW, 8, 0x000000, 0.85);
+    const hpRatio = Math.max(0, unit.currentHp / unit.maxHp);
+    
     this.hpFill = this.scene.add.rectangle(
       -hpBarW / 2,
       -112,
-      hpBarW * Math.max(0, unit.currentHp / unit.maxHp),
-      5,
+      hpBarW * hpRatio,
+      7,
       isPlayer ? 0x22c55e : 0xef4444,
       1
     ).setOrigin(0, 0.5);
 
-    this.nameText = this.scene.add.text(0, 52, `${unit.heroConfig.name} (${unit.x},${unit.y})`, {
-      fontSize: "11px",
+    // 精確 HP 數字浮字 (如 120/120)
+    this.hpText = this.scene.add.text(0, -112, `${unit.currentHp}/${unit.maxHp}`, {
+      fontSize: "9px",
+      color: "#ffffff",
+      fontStyle: "bold",
+      stroke: "#000000",
+      strokeThickness: 2,
+    }).setOrigin(0.5);
+
+    this.nameText = this.scene.add.text(0, 52, `${unit.heroConfig.name}`, {
+      fontSize: "12px",
       color: isPlayer ? "#fef08a" : "#fca5a5",
       fontStyle: "bold",
       stroke: "#000000",
       strokeThickness: 3.5,
     }).setOrigin(0.5);
 
-    this.add([this.auraDisk, this.charSprite, hpBg, this.hpFill, this.nameText]);
+    this.add([this.auraDisk, this.charSprite, hpBg, this.hpFill, this.hpText, this.nameText]);
 
     if (isAmbush) {
-      this.ambushTag = this.scene.add.text(0, -126, "🌿 半隱身 (神箭伏擊)", {
+      this.ambushTag = this.scene.add.text(0, -128, "🌿 半隱身 (伏擊)", {
         fontSize: "10px",
         color: "#6ee7b7",
         fontStyle: "bold",
@@ -119,7 +141,53 @@ export class BattleUnitContainer extends Phaser.GameObjects.Container {
   }
 
   /**
-   * 根據狀態更新位置與動畫
+   * 播放受擊/技能視覺特效（震動、閃白、傷害數字飄字）
+   */
+  public playHitEffect(damage: number, isCrit: boolean = false) {
+    // 1. 受擊受損紅閃特效
+    this.scene.tweens.add({
+      targets: this.charSprite,
+      tint: 0xff0000,
+      duration: 100,
+      yoyo: true,
+      onComplete: () => this.charSprite.clearTint(),
+    });
+
+    // 2. 劇烈震動
+    this.scene.tweens.add({
+      targets: this,
+      x: this.x + (Math.random() > 0.5 ? 10 : -10),
+      duration: 40,
+      yoyo: true,
+      repeat: 3,
+    });
+
+    // 3. 飄字特效
+    const floatText = this.scene.add.text(
+      this.x,
+      this.y - 80,
+      isCrit ? `💥 暴擊 -${damage}` : `⚔️ -${damage}`,
+      {
+        fontSize: isCrit ? "22px" : "16px",
+        color: isCrit ? "#f59e0b" : "#ef4444",
+        fontStyle: "bold",
+        stroke: "#000000",
+        strokeThickness: 4,
+      }
+    ).setOrigin(0.5).setDepth(310);
+
+    this.scene.tweens.add({
+      targets: floatText,
+      y: this.y - 130,
+      alpha: 0,
+      duration: 1000,
+      ease: "Back.out",
+      onComplete: () => floatText.destroy(),
+    });
+  }
+
+  /**
+   * 根據狀態更新位置與血條數值
    */
   public updateState(unit: BattleUnit, screenWidth: number, screenHeight: number) {
     this.gridCol = unit.x;
@@ -129,13 +197,14 @@ export class BattleUnitContainer extends Phaser.GameObjects.Container {
     this.baseScale = 0.7 + normY * 0.45;
     this.depth = Math.floor(py);
 
-    // 血條更新
-    const hpBarW = 64;
+    // 血條與 HP 數字更新
+    const hpBarW = 72;
     const hpRatio = Math.max(0, unit.currentHp / unit.maxHp);
-    this.hpFill.setSize(hpBarW * hpRatio, 5);
+    this.hpFill.setSize(hpBarW * hpRatio, 7);
+    this.hpText.setText(`${unit.currentHp}/${unit.maxHp}`);
 
     // 名稱位置更新
-    this.nameText.setText(`${unit.heroConfig.name} (${unit.x},${unit.y})`);
+    this.nameText.setText(`${unit.heroConfig.name}`);
 
     // 平滑位移動畫
     this.scene.tweens.add({
@@ -152,7 +221,7 @@ export class BattleUnitContainer extends Phaser.GameObjects.Container {
       this.scene.tweens.add({
         targets: this,
         alpha: 0,
-        duration: 350,
+        duration: 400,
         onComplete: () => this.setVisible(false),
       });
     } else {
@@ -163,6 +232,7 @@ export class BattleUnitContainer extends Phaser.GameObjects.Container {
   public destroyContainer() {
     this.scene.tweens.killTweensOf(this);
     this.scene.tweens.killTweensOf(this.charSprite);
+    this.scene.tweens.killTweensOf(this.auraDisk);
     this.destroy(true);
   }
 }
