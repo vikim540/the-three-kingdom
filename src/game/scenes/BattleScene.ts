@@ -8,6 +8,7 @@ import { EventBus, GAME_EVENTS } from "@/game/EventBus";
 import { BattleUnitContainer } from "@/game/objects/BattleUnitContainer";
 import { InputManager } from "@/game/controllers/InputManager";
 import { CameraManager } from "@/game/controllers/CameraManager";
+import { RealtimeCombatManager } from "@/game/controllers/RealtimeCombatManager";
 
 interface UnitSpriteContainer extends Phaser.GameObjects.Container {
   unitInstanceId?: string;
@@ -19,6 +20,7 @@ export class BattleScene extends Phaser.Scene {
   private unitContainers: Map<string, BattleUnitContainer> = new Map();
   private inputManager!: InputManager;
   private cameraManager!: CameraManager;
+  private combatManager!: RealtimeCombatManager;
   private regionGraphics!: Phaser.GameObjects.Graphics;
   private gridMeshGraphics!: Phaser.GameObjects.Graphics;
   private fogTileSprite!: Phaser.GameObjects.TileSprite;
@@ -89,13 +91,18 @@ export class BattleScene extends Phaser.Scene {
     });
 
     EventBus.on(GAME_EVENTS.REQUEST_MOVE, (targetPos: { x: number; y: number }) => {
-      // 轉換成大世界世界座標
       const worldPoint = this.cameras.main.getWorldPoint(targetPos.x, targetPos.y);
       this.unitContainers.forEach((container) => {
         if (container.isPlayer) {
           container.moveToTarget(worldPoint.x, worldPoint.y);
         }
       });
+    });
+
+    // 6.7 Helbreath 風格實時戰鬥引擎 (Realtime Combat Manager)
+    this.combatManager = new RealtimeCombatManager(this);
+    EventBus.on("player-attack", () => {
+      this.combatManager.playerAttackNearEnemies();
     });
 
     // 7. 訂閱 Store (單一真相源：單位數據與 CombatEvent 事件流 Playback)
@@ -133,7 +140,9 @@ export class BattleScene extends Phaser.Scene {
     if (this.devStoreUnsubscribe) this.devStoreUnsubscribe();
     if (this.inputManager) this.inputManager.destroy();
     if (this.cameraManager) this.cameraManager.destroy();
+    if (this.combatManager) this.combatManager.destroy();
     EventBus.off(GAME_EVENTS.REQUEST_MOVE);
+    EventBus.off("player-attack");
     this.unitContainers.forEach((container) => {
       container.destroyContainer();
     });
@@ -166,6 +175,11 @@ export class BattleScene extends Phaser.Scene {
     // 3. Helbreath 攝影機實時跟隨主角更新
     if (this.cameraManager) {
       this.cameraManager.update();
+    }
+
+    // 4. Helbreath 實時 60 FPS 戰鬥引擎與山賊追擊 AI 更新
+    if (this.combatManager) {
+      this.combatManager.update(time, delta);
     }
   }
 
@@ -419,6 +433,13 @@ export class BattleScene extends Phaser.Scene {
       if (!container) {
         container = new BattleUnitContainer(this, unit, sw, sh);
         this.unitContainers.set(unit.instanceId, container);
+        
+        // 註冊至 ARPG 實時戰鬥引擎
+        if (unit.faction === "PLAYER") {
+          this.combatManager.registerPlayer(container);
+        } else {
+          this.combatManager.registerEnemy(container, unit.currentHp, unit.atk);
+        }
       } else {
         container.updateState(unit, sw, sh);
       }

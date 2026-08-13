@@ -8,12 +8,12 @@ import { useDevStore } from "@/stores/useDevStore";
 import { useInventoryStore } from "@/stores/useInventoryStore";
 import { InGameHUD } from "@/components/game/InGameHUD";
 import { RadialCommandMenu } from "@/components/game/RadialCommandMenu";
-import { FanOutHandCards } from "@/components/game/FanOutHandCards";
 import { BanditDialogueModal } from "@/components/game/BanditDialogueModal";
 import { InventoryModal } from "@/components/game/InventoryModal";
 import { BattleResultModal } from "@/components/game/BattleResultModal";
 import { SummonModal } from "@/components/game/SummonModal";
 import { IntroNarration } from "@/components/game/IntroNarration";
+import { ARPGActionBar } from "@/components/game/ARPGActionBar";
 import { BattleUnit, HeroConfig, TacticalActionType, StoryStep } from "@/types/game";
 import { STAGE_1_BANDIT } from "@/game/config/stages";
 import { SUMMONABLE_HEROES } from "@/game/config/heroes";
@@ -475,17 +475,7 @@ export default function GamePage() {
             onExecuteAction={handleExecuteAction}
           />
 
-          <FanOutHandCards onPlaceUnit={handlePlaceUnit} />
-
-          {phase === "BATTLE_IN_PROGRESS" && selectedUnit && (
-            <RadialCommandMenu
-              x={typeof window !== "undefined" ? window.innerWidth / 2 : 400}
-              y={typeof window !== "undefined" ? window.innerHeight / 2 : 300}
-              isInAmbushRegion={selectedUnit ? isUnitInBush({ x: selectedUnit.x, y: selectedUnit.y }, STAGE_1_BANDIT.tiles) : false}
-              onSelectAction={handleExecuteAction}
-              onClose={() => setSelectedUnitId(null)}
-            />
-          )}
+          <ARPGActionBar />
 
           <InventoryModal />
           <BattleResultModal

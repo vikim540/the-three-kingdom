@@ -10,6 +10,8 @@ export class InputManager {
     S: Phaser.Input.Keyboard.Key;
     D: Phaser.Input.Keyboard.Key;
   };
+  private spaceKey!: Phaser.Input.Keyboard.Key;
+  private jKey!: Phaser.Input.Keyboard.Key;
   private moveTargetPointer: Phaser.GameObjects.Graphics | null = null;
   private isControlActive: boolean = true;
 
@@ -29,6 +31,13 @@ export class InputManager {
       S: this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S),
       D: this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D),
     };
+
+    // 空白鍵與 J 鍵實時揮刀攻擊 (Helbreath Attack Controls)
+    this.spaceKey = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+    this.jKey = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.J);
+
+    this.spaceKey.on("down", () => EventBus.emit("player-attack"));
+    this.jKey.on("down", () => EventBus.emit("player-attack"));
 
     // 2. 移動目標波紋引導指示器
     this.moveTargetPointer = this.scene.add.graphics();
