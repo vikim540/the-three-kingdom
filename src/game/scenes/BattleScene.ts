@@ -4,6 +4,8 @@ import { useDevStore } from "@/stores/useDevStore";
 import { BattleUnit, CombatEvent } from "@/types/game";
 import { gridToScreen, screenToGrid } from "@/game/utils/gridCoords";
 import { REGION_COLORS } from "@/types/region";
+import { EventBus, GAME_EVENTS } from "@/game/EventBus";
+import { BattleUnitContainer } from "@/game/objects/BattleUnitContainer";
 
 interface UnitSpriteContainer extends Phaser.GameObjects.Container {
   unitInstanceId?: string;
@@ -12,7 +14,7 @@ interface UnitSpriteContainer extends Phaser.GameObjects.Container {
 }
 
 export class BattleScene extends Phaser.Scene {
-  private unitContainers: Map<string, UnitSpriteContainer> = new Map();
+  private unitContainers: Map<string, BattleUnitContainer> = new Map();
   private regionGraphics!: Phaser.GameObjects.Graphics;
   private gridMeshGraphics!: Phaser.GameObjects.Graphics;
   private fogTileSprite!: Phaser.GameObjects.TileSprite;
@@ -77,7 +79,10 @@ export class BattleScene extends Phaser.Scene {
       this.repositionElements(gameSize.width, gameSize.height);
     });
 
-    // 9. 生命週期銷毀時對稱取消訂閱
+    // 9. 通知 React UI：Phaser 戰鬥場景已準備完畢 (EventBus)
+    EventBus.emit(GAME_EVENTS.SCENE_READY, this);
+
+    // 10. 生命週期銷毀時對稱取消訂閱
     this.events.once("shutdown", this.cleanup, this);
     this.events.once("destroy", this.cleanup, this);
   }
@@ -86,7 +91,7 @@ export class BattleScene extends Phaser.Scene {
     if (this.storeUnsubscribe) this.storeUnsubscribe();
     if (this.devStoreUnsubscribe) this.devStoreUnsubscribe();
     this.unitContainers.forEach((container) => {
-      this.tweens.killTweensOf(container);
+      container.destroyContainer();
     });
     this.unitContainers.clear();
   }
@@ -330,6 +335,7 @@ export class BattleScene extends Phaser.Scene {
 
   /**
    * 根據 Store 單一真相源整數網格座標 (col, row) 更新與渲染 2D 戰鬥單位
+   * 借鑑 Helbreath 角色物件化設計，直接使用 BattleUnitContainer 進行更新
    */
   private updateUnitsVisual(units: BattleUnit[]) {
     const sw = this.scale.width;
@@ -344,223 +350,13 @@ export class BattleScene extends Phaser.Scene {
         return;
       }
 
-      // 使用統一網格轉換庫 gridToScreen 得到螢幕像素 (px, py)
-      const { px, py, normY } = gridToScreen(unit.x, unit.y, sw, sh);
-      const perspectiveScale = 0.7 + normY * 0.45;
-
       if (!container) {
-        container = this.add.container(px, py) as UnitSpriteContainer;
-        container.unitInstanceId = unit.instanceId;
-        this.buildLive2DCharacter(container, unit, perspectiveScale);
+        container = new BattleUnitContainer(this, unit, sw, sh);
         this.unitContainers.set(unit.instanceId, container);
       } else {
-        this.buildLive2DCharacter(container, unit, perspectiveScale);
-      }
-
-      container.gridCol = unit.x;
-      container.gridRow = unit.y;
-      container.depth = Math.floor(py);
-
-      this.tweens.add({
-        targets: container,
-        x: px,
-        y: py,
-        scaleX: perspectiveScale,
-        scaleY: perspectiveScale,
-        duration: 220,
-        ease: "Power2",
-      });
-
-      if (unit.isDead) {
-        this.tweens.add({
-          targets: container,
-          alpha: 0,
-          duration: 350,
-          onComplete: () => container?.setVisible(false),
-        });
-      } else {
-        container.setVisible(true);
+        container.updateState(unit, sw, sh);
       }
     });
-  }
-
-  /**
-   * 構建角色 (自動清除舊 Tween 徹底治理記憶體洩漏，整合 Hover 1.18x 放大暗示)
-   */
-  private buildLive2DCharacter(container: UnitSpriteContainer, unit: BattleUnit, baseScale: number) {
-    // 釋放舊容器與動畫 Tween，徹底消滅洩漏
-    this.tweens.killTweensOf(container);
-    container.removeAll(true);
-
-    const isPlayer = unit.faction === "PLAYER";
-    const heroId = unit.heroConfig.id;
-
-    // 判斷是否處於草叢伏擊 (col >= 2 且 row >= 4)
-    const isAmbush = (unit.x >= 2 && unit.y >= 4 && unit.y <= 8) || unit.statusEffects.includes("AMBUSH");
-
-    // 1. 光環底圖
-    const auraColor = isPlayer
-      ? heroId === "hero_huang_zhong"
-        ? 0x10b981
-        : heroId === "hero_xiahou_dun"
-        ? 0xf59e0b
-        : 0x3b82f6
-      : 0xef4444;
-
-    const baseDisk = this.add.graphics();
-    baseDisk.fillStyle(auraColor, isAmbush ? 0.65 : 0.35);
-    baseDisk.fillEllipse(0, 36, 72, 28);
-    baseDisk.lineStyle(2.5, auraColor, 1);
-    baseDisk.strokeEllipse(0, 36, 72, 28);
-
-    // 2. 高清 100% 透明底角色立繪
-    let live2dKey = "live2d_protagonist";
-    if (heroId === "hero_huang_zhong") live2dKey = "live2d_huang_zhong";
-    else if (heroId === "enemy_bandit_chief") live2dKey = "live2d_bandit_chief";
-    else if (heroId === "enemy_bandit_thug") live2dKey = "live2d_bandit_thug";
-
-    const charSprite = this.add.image(0, -32, live2dKey);
-    charSprite.setDisplaySize(120, 150);
-
-    if (isAmbush && heroId === "hero_huang_zhong") {
-      container.setAlpha(0.62);
-    } else {
-      container.setAlpha(1.0);
-    }
-
-    // Live2D 骨骼呼吸
-    this.tweens.add({
-      targets: charSprite,
-      y: -36,
-      scaleY: charSprite.scaleY * 1.04,
-      duration: 1500,
-      yoyo: true,
-      repeat: -1,
-      ease: "Sine.easeInOut",
-    });
-
-    // 3. 血條與名稱
-    const hpBarW = 64;
-    const hpBg = this.add.rectangle(0, -112, hpBarW, 6, 0x000000, 0.85);
-    const hpFill = this.add.rectangle(
-      -hpBarW / 2, -112,
-      hpBarW * Math.max(0, unit.currentHp / unit.maxHp), 5,
-      isPlayer ? 0x22c55e : 0xef4444, 1
-    ).setOrigin(0, 0.5);
-
-    const nameText = this.add.text(0, 52, `${unit.heroConfig.name} (${unit.x},${unit.y})`, {
-      fontSize: "11px",
-      color: isPlayer ? "#fef08a" : "#fca5a5",
-      fontStyle: "bold",
-      stroke: "#000000",
-      strokeThickness: 3.5,
-    }).setOrigin(0.5);
-
-    const children: Phaser.GameObjects.GameObject[] = [baseDisk, charSprite, hpBg, hpFill, nameText];
-
-    if (isAmbush) {
-      const ambushTag = this.add.text(0, -126, "🌿 半隱身 (神箭伏擊)", {
-        fontSize: "10px",
-        color: "#6ee7b7",
-        fontStyle: "bold",
-        stroke: "#064e3b",
-        strokeThickness: 3,
-      }).setOrigin(0.5);
-      children.push(ambushTag);
-    }
-
-    container.add(children);
-
-    // 4. ⭐ Hover 懸停 1.18 倍放大暗示與手勢切換
-    container.setInteractive(
-      new Phaser.Geom.Rectangle(-50, -110, 100, 160),
-      Phaser.Geom.Rectangle.Contains
-    );
-
-    container.on("pointerover", () => {
-      if (isPlayer) {
-        this.input.setDefaultCursor("grab");
-        if (this.tooltipText) {
-          this.tooltipText
-            .setText(`🖱️ [${unit.heroConfig.name}] 網格(${unit.x},${unit.y}) - 按住拖拽調整戰術站位`)
-            .setVisible(true);
-        }
-      } else {
-        this.input.setDefaultCursor("pointer");
-        if (this.tooltipText) {
-          this.tooltipText
-            .setText(`⚔️ [${unit.heroConfig.name}] 網格(${unit.x},${unit.y}) HP:${unit.currentHp}/${unit.maxHp}`)
-            .setVisible(true);
-        }
-      }
-
-      this.tweens.add({
-        targets: container,
-        scaleX: baseScale * 1.18,
-        scaleY: baseScale * 1.18,
-        duration: 140,
-        ease: "Power2.out",
-      });
-
-      baseDisk.lineStyle(3.5, 0xf59e0b, 1);
-      baseDisk.strokeEllipse(0, 36, 76, 32);
-    });
-
-    container.on("pointerout", () => {
-      this.input.setDefaultCursor("default");
-      if (this.tooltipText) this.tooltipText.setVisible(false);
-
-      this.tweens.add({
-        targets: container,
-        scaleX: baseScale,
-        scaleY: baseScale,
-        duration: 140,
-        ease: "Power2.out",
-      });
-
-      baseDisk.lineStyle(2.5, auraColor, 1);
-      baseDisk.strokeEllipse(0, 36, 72, 28);
-    });
-
-    // 5. 場面拖拽
-    if (isPlayer) {
-      this.input.setDraggable(container);
-
-      container.on("dragstart", () => {
-        this.input.setDefaultCursor("grabbing");
-        this.tweens.add({
-          targets: container,
-          scaleX: baseScale * 1.28,
-          scaleY: baseScale * 1.28,
-          duration: 120,
-          ease: "Power2.out",
-        });
-      });
-
-      container.on("drag", (_pointer: Phaser.Input.Pointer, dragX: number, dragY: number) => {
-        if (useBattleStore.getState().phase === "DEPLOYMENT") {
-          container.x = dragX;
-          container.y = dragY;
-        }
-      });
-
-      container.on("dragend", () => {
-        this.input.setDefaultCursor("grab");
-        if (useBattleStore.getState().phase === "DEPLOYMENT") {
-          const sw = this.scale.width;
-          const sh = this.scale.height;
-
-          // 使用網格轉換庫將拖拽終點像素 safe-map 轉換為 4x10 整數網格
-          const gridPos = screenToGrid(container.x, container.y, sw, sh);
-
-          useBattleStore.getState().setUnits(
-            useBattleStore.getState().units.map((u) =>
-              u.instanceId === unit.instanceId ? { ...u, x: gridPos.col, y: gridPos.row } : u
-            )
-          );
-        }
-      });
-    }
   }
 
   /**
